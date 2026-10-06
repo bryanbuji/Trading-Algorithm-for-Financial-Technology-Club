@@ -65,7 +65,12 @@ JupyterLab opens in a browser at a localhost URL. In JupyterLab:
 
 The first notebook downloads adjusted daily prices and saves them to
 `data/processed/prices.parquet`. The second notebook uses that cached data and
-prints a formatted performance report.
+prints a formatted performance report, plots portfolio value and drawdown over
+time, marks buy/sell activity, and displays a table containing every simulated
+trade with its date, symbol, side, weights, execution price, notional value,
+estimated trading cost, realized profit/loss, net profit/loss, trade return,
+and cumulative net profit/loss. It also shows normalized strategy performance
+for the full history and shorter 1-year, 3-year, and 5-year windows.
 
 ## Run without JupyterLab
 
@@ -102,7 +107,7 @@ weights = weekly_momentum_weights(
     config["drawdown_start"],
     config["drawdown_full_defense"],
 )
-ledger, holdings = run_backtest(
+ledger, holdings, trades = run_backtest(
     prices,
     weights,
     config["initial_capital"],
@@ -112,6 +117,7 @@ ledger, holdings = run_backtest(
     config["market_impact_bps"],
 )
 print(format_performance_report(ledger, config["initial_capital"]))
+print(f"Trades recorded: {len(trades):,}")
 PY
 ```
 
