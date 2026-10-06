@@ -1,0 +1,55 @@
+start_date: "2012-01-01"
+end_date: null
+initial_capital: 100000
+frequency: "W-FRI"
+direction: "long_only"
+benchmark: "SPY"
+nasdaq_benchmark: "QQQ"
+top_n: 10
+lookback_days: 126
+skip_days: 21
+volatility_days: 63
+max_position_weight: 0.10
+max_equity_exposure: 1.0
+min_cash_weight: 0.0
+commission_bps: 1.0
+half_spread_bps: 2.5
+slippage_bps: 5.0
+market_impact_bps: 2.0
+stop_loss_pct: 0.15
+drawdown_start: 0.10
+drawdown_full_defense: 0.25
+defensive_exposure: 0.25
+universe: "sp500"
+symbols:
+  - AAPL
+  - MSFT
+  - NVDA
+  - AMZN
+  - META
+  - GOOGL
+  - AVGO
+  - JPM
+  - XOM
+  - UNH
+  - COST
+  - WMT
+  - JNJ
+  - PG
+  - HD
+  - CAT
+  - AMD
+  - NFLX
+  - SPY
+  - QQQ
+  - XLB
+  - XLC
+  - XLE
+  - XLF
+  - XLI
+  - XLK
+  - XLP
+  - XLRE
+  - XLU
+  - XLV
+  - XLY
