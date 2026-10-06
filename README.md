@@ -20,11 +20,11 @@ python3 --version
 
 ## One-time setup
 
-Run these commands from Terminal. The quotes are required because the project
-path contains spaces.
+Run these commands from Terminal after cloning the repository:
 
 ```sh
-cd "."
+git clone <repository-url>
+cd Trading-Algorithm-for-Financial-Technology-Club
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r requirements.txt
@@ -33,14 +33,16 @@ python3 -m ipykernel install --user \
   --display-name "Python (trading-research)"
 ```
 
-If `.venv` already exists, skip the `python3 -m venv .venv` command.
+If `.venv` already exists, skip the `python3 -m venv .venv` command. The
+virtual environment is intentionally excluded from Git and must be created
+locally on each computer.
 
 ## Start JupyterLab
 
 With the virtual environment activated:
 
 ```sh
-cd "."
+cd Trading-Algorithm-for-Financial-Technology-Club
 source .venv/bin/activate
 jupyter lab
 ```
@@ -49,7 +51,7 @@ If your shell says `jupyter: command not found`, bypass shell `PATH`
 configuration and run:
 
 ```sh
-"./.venv/bin/python" -m jupyterlab
+.venv/bin/python -m jupyterlab
 ```
 
 JupyterLab opens in a browser at a localhost URL. In JupyterLab:
@@ -70,14 +72,14 @@ prints a formatted performance report.
 This command runs the test suite:
 
 ```sh
-cd "."
+cd Trading-Algorithm-for-Financial-Technology-Club
 PYTHONPATH=src .venv/bin/python -m pytest -q tests
 ```
 
 To run the backtest directly:
 
 ```sh
-cd "."
+cd Trading-Algorithm-for-Financial-Technology-Club
 PYTHONPATH=src .venv/bin/python - <<'PY'
 from trading.config import load_config
 from trading.data import load_prices
@@ -151,10 +153,10 @@ Use `python3` rather than `python`.
 
 ### `jupyter: command not found`
 
-Use the absolute-path command:
+Use the project-local interpreter:
 
 ```sh
-"./.venv/bin/python" -m jupyterlab
+.venv/bin/python -m jupyterlab
 ```
 
 ### `ModuleNotFoundError: No module named 'trading'`
