@@ -1,0 +1,2 @@
+# Install the parent project's requirements.txt first.
+scikit-learn>=1.4,<2
