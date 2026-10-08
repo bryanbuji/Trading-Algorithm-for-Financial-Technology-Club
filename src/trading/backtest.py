@@ -1,6 +1,7 @@
-import pandas as pd
+
 from typing import Optional
 
+import pandas as pd
 
 TRADE_COLUMNS = [
     "date",
@@ -39,6 +40,38 @@ def run_backtest(
     ledger = pd.DataFrame({"returns": net_returns, "turnover": turnover, "equity": equity})
     trades = build_trade_ledger(prices, weights, equity, cost_rate)
     return ledger, weights, trades
+
+
+def buy_and_hold_backtest(
+    prices: pd.DataFrame,
+    symbol: str,
+    initial_capital: float,
+    commission_bps: float = 0.0,
+    half_spread_bps: float = 0.0,
+    slippage_bps: float = 0.0,
+    market_impact_bps: float = 0.0,
+) -> pd.DataFrame:
+    """Backtest a fully invested, buy-and-hold position with entry costs."""
+    if symbol not in prices:
+        raise KeyError(f"Benchmark {symbol!r} is missing from prices")
+    series = prices[symbol].dropna()
+    if series.empty:
+        raise ValueError(f"Benchmark {symbol!r} has no usable prices")
+    returns = series.pct_change(fill_method=None).fillna(0.0)
+    cost_rate = (
+        commission_bps + half_spread_bps + slippage_bps + market_impact_bps
+    ) / 10000
+    returns.iloc[0] -= cost_rate
+    equity = initial_capital * (1 + returns).cumprod()
+    return pd.DataFrame(
+        {
+            "returns": returns,
+            "turnover": pd.Series(0.0, index=series.index).mask(
+                lambda values: values.index == series.index[0], 1.0
+            ),
+            "equity": equity,
+        }
+    )
 
 
 def build_trade_ledger(

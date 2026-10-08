@@ -1,6 +1,29 @@
+from typing import Optional
+
 import numpy as np
 import pandas as pd
-from typing import Optional
+
+
+def _allocate_capped_inverse_volatility(
+    volatility: pd.Series,
+    target_exposure: float,
+    max_position_weight: float,
+) -> pd.Series:
+    """Allocate exposure while redistributing weight removed by caps."""
+    remaining = volatility.dropna().loc[lambda values: values > 0].copy()
+    allocation = pd.Series(0.0, index=remaining.index)
+    remaining_exposure = target_exposure
+    while not remaining.empty and remaining_exposure > 0:
+        raw = (1 / remaining) / (1 / remaining).sum() * remaining_exposure
+        capped = raw > max_position_weight
+        if not capped.any():
+            allocation.loc[raw.index] += raw
+            break
+        capped_symbols = raw.index[capped]
+        allocation.loc[capped_symbols] = max_position_weight
+        remaining_exposure -= max_position_weight * len(capped_symbols)
+        remaining = remaining.drop(capped_symbols)
+    return allocation[allocation > 0]
 
 
 def weekly_momentum_weights(
@@ -18,13 +41,18 @@ def weekly_momentum_weights(
     drawdown_full_defense: float = 0.25,
     expected_returns: Optional[pd.DataFrame] = None,
     volatility_target: Optional[float] = None,
+    excluded_symbols: Optional[list[str]] = None,
+    include_benchmark: bool = False,
+    benchmark_fallback: bool = False,
 ) -> pd.DataFrame:
     if benchmark not in prices:
         raise KeyError(f"Benchmark {benchmark!r} is missing from prices")
     weekly = prices.resample("W-FRI").last().ffill()
     daily_returns = prices.pct_change(fill_method=None)
     momentum = prices.shift(skip_days).div(prices.shift(lookback_days)).sub(1)
-    volatility = daily_returns.rolling(volatility_days).std() * np.sqrt(252)
+    volatility = (
+        daily_returns.rolling(volatility_days).std() * np.sqrt(252)
+    ).ffill()
     momentum = momentum.reindex(weekly.index, method="ffill")
     volatility = volatility.reindex(weekly.index, method="ffill")
     trailing_high = prices.rolling(volatility_days).max().reindex(weekly.index, method="ffill")
@@ -35,7 +63,12 @@ def weekly_momentum_weights(
     )
     exposure = exposure.clip(lower=defensive_exposure, upper=1.0)
     weights = pd.DataFrame(0.0, index=weekly.index, columns=prices.columns)
-    candidates = [symbol for symbol in prices.columns if symbol != benchmark]
+    excluded = set(excluded_symbols or [])
+    candidates = [
+        symbol
+        for symbol in prices.columns
+        if (include_benchmark or symbol != benchmark) and symbol not in excluded
+    ]
     for date in weekly.index:
         scores = (
             expected_returns.reindex(index=weekly.index, columns=candidates, method="ffill")
@@ -49,9 +82,16 @@ def weekly_momentum_weights(
         scores = scores[vol.notna() & (vol > 0)].nlargest(top_n)
         if scores.empty:
             continue
-        raw = (1 / vol.loc[scores.index]).replace([np.inf, -np.inf], np.nan).dropna()
-        raw = raw / raw.sum() * min(max_equity_exposure, exposure.loc[date])
-        weights.loc[date, raw.index] = raw.clip(upper=max_position_weight)
+        target_exposure = min(max_equity_exposure, exposure.loc[date])
+        raw = _allocate_capped_inverse_volatility(
+            vol.loc[scores.index],
+            target_exposure,
+            max_position_weight,
+        )
+        if raw.empty and benchmark_fallback:
+            weights.loc[date, benchmark] = min(max_equity_exposure, exposure.loc[date])
+            continue
+        weights.loc[date, raw.index] = raw
         total = weights.loc[date].sum()
         if total > max_equity_exposure:
             weights.loc[date] *= max_equity_exposure / total

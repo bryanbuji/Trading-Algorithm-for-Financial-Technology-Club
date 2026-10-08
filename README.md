@@ -1,6 +1,6 @@
 # Trading Algorithm for Financial Technology Club
 
-This project is a weekly, long-only equity/ETF research system. It combines
+This project is a weekly, long-only multi-asset research system. It combines
 cross-sectional momentum, volatility-adjusted position sizing, a broad-market
 trend regime, trailing stop-loss filtering, transaction costs, and drawdown
 exposure controls. It now reports mathematically defined expected-return
@@ -9,6 +9,10 @@ portfolio Sharpe, and concentration. An optional ML workflow is provided
 separately. It is
 designed for teaching and reproducible research; it does not place live
 brokerage orders.
+
+See [Research mathematics and validation](./RESEARCH_MATHEMATICS.md) for the
+equations behind momentum, volatility, weighting, exposure, drawdown,
+transaction costs, performance ratios, and the validation tests.
 
 ## Requirements
 
@@ -66,8 +70,14 @@ JupyterLab opens in a browser at a localhost URL. In JupyterLab:
 4. Confirm that it reports approximately `3,700 dates x 505 symbols`.
 5. Open `notebooks/02_backtest_baseline.ipynb`.
 6. Choose **Kernel → Restart Kernel and Run All Cells**.
+7. In the first code cell, leave `plot_start` and `plot_end` as `None` to
+   display the full history. Set both values, for example
+   `plot_start = "2020-01-01"` and `plot_end = "2020-12-31"`, only when you
+   want a focused chart.
 
-The first notebook downloads adjusted daily prices and saves them to
+The first notebook downloads adjusted daily prices for the configured
+equities, forex, bonds, commodities, and explicit historical-symbol lists and
+saves them to
 `data/processed/prices.parquet`. The second notebook uses that cached data and
 prints the rules-based report, plots portfolio value
 and drawdown over time, marks buy/sell activity, and displays a table containing every simulated
@@ -80,6 +90,17 @@ positions, concentration, and Sharpe.
 The optional ML workflow has its own notebook, runner, and dependency file in
 [Machine Learning Trade Model/](./Machine%20Learning%20Trade%20Model/README.md).
 
+The rules notebook supports `conservative`, `balanced`, and `aggressive`
+risk profiles. Set `risk_profile` in its first code cell and rerun all cells.
+The profile changes exposure, position caps, volatility targeting, and
+stop-loss tolerance; it does not change the signal universe.
+
+The allocation logic now redistributes weight after applying position caps.
+Previously, inverse-volatility weights were capped without redistribution,
+which could leave a permitted 100% portfolio exposure with only 50–60%
+invested. That underinvestment was a primary cause of the unexpectedly low
+return and low trade count after the universe expansion.
+
 ## Run without JupyterLab
 
 This command runs the test suite:
@@ -88,6 +109,17 @@ This command runs the test suite:
 cd Trading-Algorithm-for-Financial-Technology-Club
 PYTHONPATH=src .venv/bin/python -m pytest -q tests
 ```
+
+To run the robustness audit:
+
+```sh
+PYTHONPATH=src .venv/bin/python scripts/robustness_audit.py
+```
+
+The audit checks that future price mutations cannot change earlier signals,
+reports the requested 2012-2016, 2016-2020, 2020-2023, and 2023-2026 windows,
+tests defined bull/bear regimes, compares against buy-and-hold `SPY`, and
+reruns the strategy under higher execution costs.
 
 To run the backtest directly:
 
@@ -141,11 +173,40 @@ stop_loss_pct: 0.10
 drawdown_start: 0.05
 ```
 
-After changing `symbols`, run `01_data_download.ipynb` again before running
-the backtest. The default universe is the current S&P 500 constituents plus
-`SPY` and `QQQ` (505 symbols). Because current constituents are used for the
-whole historical period, this dataset has survivorship bias. Point-in-time
-constituent data is required for production-quality research.
+After changing `symbols` or the asset-class lists, rerun `01_data_download.ipynb`
+before running the backtest. The default universe combines current S&P 500 constituents, broad asset-class
+proxies, additional non-S&P international and thematic ETFs, and a small
+explicit list of historically failed or delisted symbols.
+The failed-symbol list is not comprehensive and Yahoo Finance may not provide
+complete histories for those tickers. Current constituents are still applied
+backward through history, so survivorship bias remains unless a point-in-time
+security master and delisted-price source are supplied.
+
+On the locally downloaded 586-symbol universe, the current profiles produced
+these illustrative results:
+
+| Profile | Total return | Annualized return | Sharpe | Max drawdown |
+| --- | ---: | ---: | ---: | ---: |
+| Conservative | -0.395% | -0.027% | -0.023 | -3.973% |
+| Balanced | 1.755% | 0.118% | 0.080 | -5.172% |
+| Aggressive | 1.890% | 0.127% | 0.088 | -4.751% |
+
+These are not forecasts. They show that the sizing fix improves the result
+from the prior 0.6% run, but the strategy still does not approach the former
+2250% result. The earlier result should remain treated as invalid until it can
+be reproduced with point-in-time data, realistic execution, and independent
+validation.
+
+The aggressive profile is deliberately the highest-return candidate found in
+the current exploratory comparison, but it still does not beat full-period
+buy-and-hold SPY after costs. The project does not silently tune parameters
+against the complete history just to manufacture a benchmark beat; use
+walk-forward optimization before selecting production parameters.
+
+For a serious survivorship-bias study, replace `historical_symbols` with a
+point-in-time universe from CRSP, Compustat, Norgate, or another provider that
+retains delisted securities and corporate actions. Do not interpret the
+hand-curated list as survivorship-bias-free.
 
 ## Project defaults
 
@@ -156,6 +217,7 @@ constituent data is required for production-quality research.
 - Position cap: `10%`
 - Maximum equity exposure: `100%`
 - Costs: commission, half-spread, slippage, and market impact
+- Signal execution: next trading day after the Friday close (`1` day lag)
 - Drawdown control: exposure reduces progressively after `10%` drawdown and
   reaches the defensive floor at `25%`
 - Forecast horizon: `21` trading days
@@ -199,10 +261,12 @@ not represented. Yahoo Finance adjusted prices, missing/delisted securities,
 execution timing, liquidity, and simplified market-impact assumptions can also
 materially affect results.
 
-Use the out-of-sample, walk-forward, cost-sensitivity, and benchmark charts
-before drawing conclusions. Point-in-time constituent membership and a
-licensed survivorship-bias-controlled data source are required for
-production-quality research.
+Use the segmented/regime output, leakage test, cost sensitivity, and
+buy-and-hold comparison before drawing conclusions. A return increase after
+2022 is not considered validated merely because it reproduces; inspect its
+period concentration, turnover, symbols, and cost sensitivity. Point-in-time
+constituent membership and a licensed survivorship-bias-controlled data source
+are required for production-quality research.
 
 ## Troubleshooting
 

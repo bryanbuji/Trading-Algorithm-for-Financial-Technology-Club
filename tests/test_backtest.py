@@ -1,8 +1,13 @@
 import pandas as pd
-import numpy as np
 
-from trading.backtest import format_performance_report, run_backtest
+from trading.backtest import (
+    buy_and_hold_backtest,
+    format_performance_report,
+    run_backtest,
+)
 from trading.risk import risk_diagnostics
+from trading.robustness import assert_no_lookahead, segmented_performance
+from trading.strategy import weekly_momentum_weights
 from trading.visualization import period_returns, select_period
 
 
@@ -51,3 +56,37 @@ def test_risk_diagnostics_and_period_filters_are_available() -> None:
     assert selected.index.min() >= pd.Timestamp("2018-03-01")
     assert selected.index.max() <= pd.Timestamp("2018-05-01")
     assert len(period_returns(pd.DataFrame({"equity": prices["SPY"]}), "M")) > 0
+
+
+def test_buy_and_hold_and_lookahead_diagnostics() -> None:
+    index = pd.date_range("2012-01-01", periods=500, freq="B")
+    prices = pd.DataFrame(
+        {
+            "SPY": 100 * (1.001 ** pd.Series(range(len(index)), index=index)),
+            "AAA": 50 * (1.002 ** pd.Series(range(len(index)), index=index)),
+        },
+        index=index,
+    )
+    weights = weekly_momentum_weights(
+        prices, "SPY", top_n=1, lookback_days=20, skip_days=5, volatility_days=10
+    )
+    benchmark = buy_and_hold_backtest(prices, "SPY", 100_000, slippage_bps=5)
+
+    assert benchmark["equity"].iloc[-1] > benchmark["equity"].iloc[0]
+    assert len(
+        segmented_performance(benchmark, {"sample": ("2012-01-01", "2013-12-31")})
+    ) == 1
+    assert not weights.empty
+    assert_no_lookahead(
+        prices,
+        lambda frame, benchmark_name: weekly_momentum_weights(
+            frame,
+            benchmark_name,
+            top_n=1,
+            lookback_days=20,
+            skip_days=5,
+            volatility_days=10,
+        ),
+        "SPY",
+        "2012-12-31",
+    )

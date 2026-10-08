@@ -1,9 +1,12 @@
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Optional, Union
+from typing import Optional, Union
 from urllib.request import Request, urlopen
 
 import pandas as pd
 import yfinance as yf
+
+ASSET_CLASS_KEYS = ("equities", "forex", "bonds", "commodities")
 
 
 def sp500_symbols() -> list[str]:
@@ -17,6 +20,28 @@ def sp500_symbols() -> list[str]:
     if len(symbols) < 250:
         raise RuntimeError(f"S&P 500 source returned only {len(symbols)} symbols")
     return symbols
+
+
+def configured_symbols(config: dict) -> list[str]:
+    """Build a configured multi-asset research universe.
+
+    Current index constituents are still a convenience source, not a
+    point-in-time constituent database. ``historical_symbols`` is an explicit
+    place to add delisted or failed securities supplied by a better provider.
+    """
+    symbols = list(config.get("symbols", []))
+    if config.get("include_current_sp500", config.get("universe") == "sp500"):
+        symbols.extend(sp500_symbols())
+    symbols.extend(config.get("historical_symbols", []))
+    for key in ASSET_CLASS_KEYS:
+        symbols.extend(config.get("asset_classes", {}).get(key, []))
+    symbols.extend(
+        [
+            config["benchmark"],
+            config.get("nasdaq_benchmark", ""),
+        ]
+    )
+    return list(dict.fromkeys(symbol for symbol in symbols if symbol))
 
 
 def download_prices(
@@ -50,6 +75,23 @@ def download_prices(
     path.parent.mkdir(parents=True, exist_ok=True)
     close.to_parquet(path)
     return close
+
+
+def coverage_report(prices: pd.DataFrame) -> pd.DataFrame:
+    """Return first/last observation and count for every downloaded symbol."""
+    records = []
+    for symbol in prices.columns:
+        observations = prices[symbol].dropna()
+        records.append(
+            {
+                "symbol": symbol,
+                "first_date": observations.index.min(),
+                "last_date": observations.index.max(),
+                "observations": int(observations.size),
+                "available": not observations.empty,
+            }
+        )
+    return pd.DataFrame.from_records(records).set_index("symbol")
 
 
 def load_prices(path: Union[str, Path] = "data/processed/prices.parquet") -> pd.DataFrame:

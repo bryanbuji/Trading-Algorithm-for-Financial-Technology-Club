@@ -2,6 +2,7 @@ start_date: "2012-01-01"
 end_date: null
 initial_capital: 100000
 frequency: "W-FRI"
+signal_execution_lag_days: 1
 direction: "long_only"
 benchmark: "SPY"
 nasdaq_benchmark: "QQQ"
@@ -22,7 +23,8 @@ stop_loss_pct: 0.15
 drawdown_start: 0.10
 drawdown_full_defense: 0.25
 defensive_exposure: 0.25
-universe: "sp500"
+universe: "multi_asset_research"
+include_current_sp500: true
 symbols:
   - AAPL
   - MSFT
@@ -55,3 +57,105 @@ symbols:
   - XLU
   - XLV
   - XLY
+historical_symbols:
+  # Examples of failed, acquired, or delisted securities. Yahoo availability
+  # varies; a point-in-time security master is preferred for production use.
+  - LEH
+  - BSC
+  - WAMUQ
+  - ENRNQ
+  - WCOMQ
+  - GM
+  - C
+  - FNM
+  - FRE
+asset_classes:
+  equities:
+    - DIA
+    - IWM
+    - EFA
+    - EEM
+    - VT
+    - VTI
+    - VOO
+    - IVV
+    - MDY
+    - IJH
+    - IJM
+    - IJR
+    - VB
+    - VEA
+    - VWO
+    - ACWI
+    - URTH
+    - EWJ
+    - EWZ
+    - FXI
+    - INDA
+    - EWT
+    - EWY
+    - EWC
+    - EWH
+    - EWS
+    - EIDO
+    - TUR
+    - ARGT
+    - ITA
+    - XBI
+    - SMH
+    - IGV
+    - ICLN
+    - TAN
+    - PBW
+    - XRT
+  forex:
+    - EURUSD=X
+    - GBPUSD=X
+    - USDJPY=X
+    - AUDUSD=X
+    - USDCAD=X
+    - USDCHF=X
+  bonds:
+    - TLT
+    - IEF
+    - SHY
+    - BND
+    - LQD
+    - HYG
+    - TIP
+    - AGG
+  commodities:
+    - GLD
+    - SLV
+    - USO
+    - UNG
+    - DBA
+    - DBC
+    - GC=F
+    - CL=F
+    - SI=F
+    - HG=F
+    - ZC=F
+    - ZS=F
+risk_profiles:
+  conservative:
+    top_n: 8
+    max_equity_exposure: 0.60
+    max_position_weight: 0.06
+    volatility_target: 0.12
+    stop_loss_pct: 0.10
+  balanced:
+    top_n: 10
+    max_equity_exposure: 1.00
+    max_position_weight: 0.10
+    volatility_target: 0.20
+    stop_loss_pct: 0.15
+  aggressive:
+    top_n: 5
+    skip_days: 5
+    max_equity_exposure: 1.00
+    max_position_weight: 0.20
+    volatility_target: null
+    stop_loss_pct: 0.25
+trade_asset_classes:
+  - equities
