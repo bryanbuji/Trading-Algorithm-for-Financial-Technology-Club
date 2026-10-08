@@ -3,8 +3,12 @@
 This project is a weekly, long-only equity/ETF research system. It combines
 cross-sectional momentum, volatility-adjusted position sizing, a broad-market
 trend regime, trailing stop-loss filtering, transaction costs, and drawdown
-exposure controls. It is designed for teaching and reproducible research; it
-does not place live brokerage orders.
+exposure controls. It now reports mathematically defined expected-return
+proxies, volatility, downside volatility, beta, correlation, reward/risk,
+portfolio Sharpe, and concentration. An optional ML workflow is provided
+separately. It is
+designed for teaching and reproducible research; it does not place live
+brokerage orders.
 
 ## Requirements
 
@@ -65,12 +69,16 @@ JupyterLab opens in a browser at a localhost URL. In JupyterLab:
 
 The first notebook downloads adjusted daily prices and saves them to
 `data/processed/prices.parquet`. The second notebook uses that cached data and
-prints a formatted performance report, plots portfolio value and drawdown over
-time, marks buy/sell activity, and displays a table containing every simulated
+prints the rules-based report, plots portfolio value
+and drawdown over time, marks buy/sell activity, and displays a table containing every simulated
 trade with its date, symbol, side, weights, execution price, notional value,
 estimated trading cost, realized profit/loss, net profit/loss, trade return,
-and cumulative net profit/loss. It also shows normalized strategy performance
-for the full history and shorter 1-year, 3-year, and 5-year windows.
+and cumulative net profit/loss. It also shows configurable full-history,
+arbitrary date-range, annual, monthly, and five-year views for equity,
+returns, trade count, traded notional, P/L, drawdown, exposure, volatility,
+positions, concentration, and Sharpe.
+The optional ML workflow has its own notebook, runner, and dependency file in
+[Machine Learning Trade Model/](./Machine%20Learning%20Trade%20Model/README.md).
 
 ## Run without JupyterLab
 
@@ -150,6 +158,51 @@ constituent data is required for production-quality research.
 - Costs: commission, half-spread, slippage, and market impact
 - Drawdown control: exposure reduces progressively after `10%` drawdown and
   reaches the defensive floor at `25%`
+- Forecast horizon: `21` trading days
+- Volatility target: `20%` annualized
+- Optional ML comparison: a lagged-feature regularized Ridge model evaluated
+  with walk-forward predictions in the separate ML folder
+
+## Mathematical diagnostics
+
+The risk layer uses daily adjusted-price returns and annualizes volatility with
+`standard deviation × sqrt(252)`. It reports:
+
+- **Expected return proxy:** lagged 6-month momentum scaled to a one-year
+  horizon and clipped to avoid unbounded forecasts.
+- **Expected profit:** expected return scaled to the configured forecast
+  horizon.
+- **Expected loss:** annualized volatility scaled by the square root of the
+  forecast horizon.
+- **Reward/risk:** expected profit divided by expected loss.
+- **Forecast Sharpe:** the same ex-ante reward/risk proxy; it is not a realized
+  Sharpe ratio.
+- **Portfolio Sharpe:** rolling annualized mean return divided by rolling
+  standard deviation.
+- **Concentration:** the sum of squared position weights (HHI-style measure).
+
+The optional ML workflow uses lagged momentum, volatility, relative strength,
+and benchmark-volatility features. It retrains chronologically and reports the
+out-of-sample prediction/realized-return correlation. Install its separate
+requirements and follow [Machine Learning Trade Model/README.md](./Machine%20Learning%20Trade%20Model/README.md).
+It is intentionally simple and is not evidence that future returns are
+predictable.
+
+## Interpreting the unusually high return
+
+A 3,750% total return over 14 years is approximately a 28% annualized return,
+not a guaranteed 37-fold annual profit rate. It should be treated as a
+research alert, not a result to trust automatically. The default universe is
+the current S&P 500 membership applied backward over the full history. That
+creates survivorship bias because failed, acquired, and removed companies are
+not represented. Yahoo Finance adjusted prices, missing/delisted securities,
+execution timing, liquidity, and simplified market-impact assumptions can also
+materially affect results.
+
+Use the out-of-sample, walk-forward, cost-sensitivity, and benchmark charts
+before drawing conclusions. Point-in-time constituent membership and a
+licensed survivorship-bias-controlled data source are required for
+production-quality research.
 
 ## Troubleshooting
 
@@ -175,6 +228,14 @@ the project automatically. For terminal commands, include `PYTHONPATH=src`.
 This warning comes from the macOS system Python SSL library. It does not
 prevent the research workflow from running. A newer Python installation can
 remove the warning.
+
+### ML overflow or invalid `matmul` warnings
+
+The standalone ML workflow cleans non-finite prices, clips extreme feature
+and target values, skips unusable training windows, and clips predictions to a
+bounded return range. Run the notebook in the ML folder with a fresh kernel.
+Missing predictions for symbols without enough history are expected and are
+excluded from ranking.
 
 ## Important limitations
 

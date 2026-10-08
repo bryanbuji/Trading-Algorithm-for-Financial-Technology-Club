@@ -1,6 +1,9 @@
 import pandas as pd
+import numpy as np
 
 from trading.backtest import format_performance_report, run_backtest
+from trading.risk import risk_diagnostics
+from trading.visualization import period_returns, select_period
 
 
 def test_performance_report_formats_profit_and_percentages() -> None:
@@ -29,3 +32,22 @@ def test_backtest_records_position_changes() -> None:
     assert trades["notional"].round(3).tolist() == [500.0, 500.0, 262.488]
     assert trades["net_profit_loss"].round(3).tolist() == [0.0, 45.405, 0.0]
     assert trades["profit_loss_pct"].round(3).tolist() == [0.0, 0.091, 0.0]
+
+
+def test_risk_diagnostics_and_period_filters_are_available() -> None:
+    index = pd.date_range("2018-01-01", periods=160, freq="B")
+    prices = pd.DataFrame(
+        {
+            "SPY": 100 * (1.0005 ** pd.Series(range(len(index)), index=index)),
+            "AAA": 80 * (1.0008 ** pd.Series(range(len(index)), index=index)),
+        },
+        index=index,
+    )
+
+    diagnostics = risk_diagnostics(prices, "SPY", forecast_horizon_days=21, volatility_days=20)
+    selected = select_period(prices, "2018-03-01", "2018-05-01")
+
+    assert {"volatility", "reward_risk", "forecast_sharpe"} <= set(diagnostics)
+    assert selected.index.min() >= pd.Timestamp("2018-03-01")
+    assert selected.index.max() <= pd.Timestamp("2018-05-01")
+    assert len(period_returns(pd.DataFrame({"equity": prices["SPY"]}), "M")) > 0

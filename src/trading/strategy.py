@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from typing import Optional
 
 
 def weekly_momentum_weights(
@@ -15,6 +16,8 @@ def weekly_momentum_weights(
     stop_loss_pct: float = 0.15,
     drawdown_start: float = 0.10,
     drawdown_full_defense: float = 0.25,
+    expected_returns: Optional[pd.DataFrame] = None,
+    volatility_target: Optional[float] = None,
 ) -> pd.DataFrame:
     if benchmark not in prices:
         raise KeyError(f"Benchmark {benchmark!r} is missing from prices")
@@ -34,7 +37,13 @@ def weekly_momentum_weights(
     weights = pd.DataFrame(0.0, index=weekly.index, columns=prices.columns)
     candidates = [symbol for symbol in prices.columns if symbol != benchmark]
     for date in weekly.index:
-        scores = momentum.loc[date, candidates].dropna()
+        scores = (
+            expected_returns.reindex(index=weekly.index, columns=candidates, method="ffill")
+            .loc[date]
+            .dropna()
+            if expected_returns is not None
+            else momentum.loc[date, candidates].dropna()
+        )
         scores = scores[~stop_triggered.loc[date, scores.index]]
         vol = volatility.loc[date, candidates].reindex(scores.index)
         scores = scores[vol.notna() & (vol > 0)].nlargest(top_n)
@@ -46,4 +55,11 @@ def weekly_momentum_weights(
         total = weights.loc[date].sum()
         if total > max_equity_exposure:
             weights.loc[date] *= max_equity_exposure / total
+        if volatility_target is not None and total > 0:
+            selected_returns = daily_returns[weights.columns[weights.loc[date] > 0]]
+            portfolio_volatility = selected_returns.mul(weights.loc[date], axis=1).sum(axis=1).rolling(
+                volatility_days
+            ).std().iloc[-1] * np.sqrt(252)
+            if pd.notna(portfolio_volatility) and portfolio_volatility > volatility_target:
+                weights.loc[date] *= volatility_target / portfolio_volatility
     return weights
