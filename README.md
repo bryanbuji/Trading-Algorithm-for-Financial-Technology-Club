@@ -10,20 +10,16 @@ separately. It is
 designed for teaching and reproducible research; it does not place live
 brokerage orders.
 
-See [Research mathematics and validation](./RESEARCH_MATHEMATICS.md) for the
-equations behind momentum, volatility, weighting, exposure, drawdown,
-transaction costs, performance ratios, and the validation tests.
-
 ## Requirements
 
 - macOS, Linux, or Windows
-- Python 3.9 or newer
+- Python 3.15
 - Internet access for Yahoo Finance data downloads
 
 Check your Python installation:
 
 ```sh
-python3 --version
+python3.15 --version
 ```
 
 ## One-time setup
@@ -33,17 +29,20 @@ Run these commands from Terminal after cloning the repository:
 ```sh
 git clone <repository-url>
 cd Trading-Algorithm-for-Financial-Technology-Club
-python3 -m venv .venv
+python3.15 -m venv .venv
 source .venv/bin/activate
-python3 -m pip install -r requirements.txt
-python3 -m ipykernel install --user \
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install lean==1.0.229
+python -m ipykernel install --user \
   --name trading-research \
   --display-name "Python (trading-research)"
 ```
 
-If `.venv` already exists, skip the `python3 -m venv .venv` command. The
+If `.venv` already exists, verify it uses Python 3.15 before reusing it. The
 virtual environment is intentionally excluded from Git and must be created
-locally on each computer.
+locally on each computer. The pandas 3.x dependency requires Python 3.15 in
+this project setup.
 
 ## Start JupyterLab
 
@@ -100,6 +99,10 @@ Previously, inverse-volatility weights were capped without redistribution,
 which could leave a permitted 100% portfolio exposure with only 50–60%
 invested. That underinvestment was a primary cause of the unexpectedly low
 return and low trade count after the universe expansion.
+Non-positive observations, such as the negative front-month crude-oil futures
+settlement in April 2020, are converted to missing values because ordinary
+percentage-return math is undefined across zero. A futures-specific continuous
+contract model is required to include those observations faithfully.
 
 ## Run without JupyterLab
 
@@ -181,6 +184,96 @@ The failed-symbol list is not comprehensive and Yahoo Finance may not provide
 complete histories for those tickers. Current constituents are still applied
 backward through history, so survivorship bias remains unless a point-in-time
 security master and delisted-price source are supplied.
+When an asset has no observations after a period in which it was held, the
+pandas backtester treats the first date after a five-observation trailing gap as
+a delisting liquidation at zero rather than silently carrying the position at
+an unchanged value. This avoids mistaking a one-day vendor delay for a
+delisting. It does not replace a point-in-time delisted-price feed.
+
+## Free delisted-company data
+
+There is no complete, point-in-time, survivorship-bias-free US equity database
+with adjusted prices that is both freely redistributable and available through
+a simple public API. The project therefore does not claim that its Yahoo
+Finance cache is delisted-security data.
+
+Potential free research sources are documented below, but each requires
+validation before use:
+
+- SEC EDGAR company submissions and filings: free official metadata, but not a
+  ready-made delisted-price database. The integration uses `data.sec.gov` and
+  requires an identifying `SEC_USER_AGENT` containing a name and email.
+- CRSP/Compustat and Norgate: appropriate survivorship-bias-controlled sources,
+  but not free for this use.
+- Stooq and public exchange archives: sometimes retain symbols after delisting,
+  but coverage, corporate actions, and redistribution rights vary.
+- Alpha Vantage: offers a free API tier for optional adjusted prices, but
+  requires `ALPHAVANTAGE_API_KEY`, has strict quotas, and does not guarantee
+  delisted-company coverage.
+- FRED: genuinely free public benchmark and macroeconomic series; it does not
+  provide individual-company prices.
+- GitHub datasets: useful for experiments only after checking provenance and
+  licensing; many are scraped, incomplete, or survivorship-biased.
+
+The current project keeps a small explicit failed-symbol list and reports the
+limitation rather than silently treating it as a complete delisted universe.
+Before using any free source, record its license, symbol membership dates,
+price adjustment method, listing date, delisting date, and missing-data policy.
+
+The optional adapters are in
+[src/trading/open_data.py](./src/trading/open_data.py). Download selected
+research data with:
+
+```sh
+# Add Alpha Vantage adjusted prices to the existing Yahoo cache.
+export ALPHAVANTAGE_API_KEY="your-key"
+PYTHONPATH=src python3.15 scripts/download_open_data.py \
+  --merge-alpha-symbol LEH
+```
+
+The merge adds missing symbols and fills missing observations without
+overwriting non-missing Yahoo values. It updates
+`data/processed/prices.parquet` in place. You can also set
+`alpha_vantage_symbols` in `config.yaml`; the data-download notebook performs
+the same merge automatically after downloading Yahoo prices.
+
+```yaml
+alpha_vantage_symbols:
+  - LEH
+  - WAMUQ
+```
+
+# FRED benchmark/macro series; no FRED API key is required for CSV downloads.
+```sh
+PYTHONPATH=src python3.15 scripts/download_open_data.py \
+  --fred-series SP500 --fred-series VIXCLS
+
+# SEC submissions and XBRL company facts; use an identifying name and email.
+export SEC_USER_AGENT="Research Name research@example.com"
+PYTHONPATH=src python3.15 scripts/download_open_data.py \
+  --sec-cik 320193
+```
+
+FRED and SEC files are written to ignored `data/external/`. Alpha Vantage is a
+supplement to the Yahoo cache, not a point-in-time delisted universe. SEC
+outputs provide event and company metadata that must be joined with a price
+source.
+
+## LEAN audit
+
+An independent QuantConnect LEAN implementation is maintained in the sibling
+repository [LEAN based trading algorithm FINTECH](</Users/buji/Projects/LEAN%20based%20trading%20algorithm%20FINTECH/>).
+It reproduces the weekly signal cadence, next-session execution, top-five
+momentum selection, inverse-volatility sizing, position caps, and SPY fallback.
+It requires the LEAN CLI (installed with `pipx`), Docker, and LEAN-compatible
+licensed data; this project's Yahoo Finance Parquet files are not automatically
+valid LEAN data.
+
+Run the pandas provenance audit before comparing engines:
+
+```sh
+PYTHONPATH=src .venv/bin/python scripts/provenance_audit.py
+```
 
 On the locally downloaded 586-symbol universe, the current profiles produced
 these illustrative results:
@@ -272,7 +365,8 @@ are required for production-quality research.
 
 ### `python: command not found`
 
-Use `python3` rather than `python`.
+Create the environment with `python3.15`, then activate it before using
+`python`.
 
 ### `jupyter: command not found`
 

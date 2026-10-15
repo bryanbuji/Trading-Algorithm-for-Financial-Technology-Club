@@ -1,7 +1,17 @@
 .venv/
+.venv-*/
+.env
+.env.*
+!.env.example
 data/
+data/external/
 .pytest_cache/
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
 .DS_Store
+LEAN Audit/data/
+LEAN Audit/**/backtest/
+LEAN Audit/**/backtests/
+LEAN Audit/**/logs/
+LEAN Audit/**/results/

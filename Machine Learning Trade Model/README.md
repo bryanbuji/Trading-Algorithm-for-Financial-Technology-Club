@@ -10,10 +10,11 @@ chronologically to avoid look-ahead leakage.
 From the repository root:
 
 ```sh
-python3 -m venv .venv
+python3.15 -m venv .venv
 source .venv/bin/activate
-python3 -m pip install -r requirements.txt
-python3 -m pip install -r "Machine Learning Trade Model/requirements.txt"
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -r "Machine Learning Trade Model/requirements.txt"
 ```
 
 The ML workflow uses the parent project's cached prices. Download them first

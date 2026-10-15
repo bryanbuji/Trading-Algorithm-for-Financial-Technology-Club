@@ -2,11 +2,25 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Optional, Union
 from urllib.request import Request, urlopen
+import warnings
 
 import pandas as pd
 import yfinance as yf
 
 ASSET_CLASS_KEYS = ("equities", "forex", "bonds", "commodities")
+
+
+def _sanitize_prices(prices: pd.DataFrame) -> pd.DataFrame:
+    invalid = int((prices <= 0).sum().sum())
+    if invalid:
+        warnings.warn(
+            f"Replaced {invalid} non-positive price observations with missing values; "
+            "percentage-return backtests cannot represent zero or negative prices.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        prices = prices.mask(prices <= 0)
+    return prices
 
 
 def sp500_symbols() -> list[str]:
@@ -69,6 +83,7 @@ def download_prices(
         close = close.to_frame(name=symbols[0])
     close = close.sort_index().dropna(how="all")
     close.index = pd.to_datetime(close.index).tz_localize(None)
+    close = _sanitize_prices(close)
     if close.empty or close.isna().all().all():
         raise RuntimeError("Downloaded prices contain no usable observations")
     path = Path(cache_path)
@@ -98,6 +113,7 @@ def load_prices(path: Union[str, Path] = "data/processed/prices.parquet") -> pd.
     prices = pd.read_parquet(path)
     prices.index = pd.to_datetime(prices.index).tz_localize(None)
     prices = prices.sort_index()
+    prices = _sanitize_prices(prices)
     if prices.empty:
         raise ValueError(f"No prices found in {path}")
     return prices

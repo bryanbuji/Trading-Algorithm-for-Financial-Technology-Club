@@ -10,8 +10,17 @@ def risk_diagnostics(
 ) -> dict[str, pd.DataFrame]:
     returns = prices.pct_change(fill_method=None)
     annualization = np.sqrt(252)
-    volatility = returns.rolling(volatility_days).std() * annualization
-    downside = returns.where(returns < 0).rolling(volatility_days).std() * annualization
+    min_periods = min(20, volatility_days)
+    volatility = (
+        returns.rolling(volatility_days, min_periods=min_periods).std()
+        * annualization
+    )
+    downside = (
+        returns.where(returns < 0)
+        .rolling(volatility_days, min_periods=min_periods)
+        .std()
+        * annualization
+    )
     benchmark_returns = returns[benchmark]
     beta = returns.rolling(volatility_days).cov(benchmark_returns).div(
         benchmark_returns.rolling(volatility_days).var(), axis=0

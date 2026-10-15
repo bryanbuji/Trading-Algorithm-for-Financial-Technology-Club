@@ -69,6 +69,7 @@ historical_symbols:
   - C
   - FNM
   - FRE
+alpha_vantage_symbols: []
 asset_classes:
   equities:
     - DIA

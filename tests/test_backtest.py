@@ -39,6 +39,19 @@ def test_backtest_records_position_changes() -> None:
     assert trades["profit_loss_pct"].round(3).tolist() == [0.0, 0.091, 0.0]
 
 
+def test_trailing_missing_price_is_liquidated_at_zero() -> None:
+    index = pd.date_range("2020-01-01", periods=3, freq="D")
+    prices = pd.DataFrame({"AAA": [10.0, 11.0, float("nan")]}, index=index)
+    weights = pd.DataFrame({"AAA": [1.0, 1.0, 1.0]}, index=index)
+
+    ledger, holdings, _ = run_backtest(
+        prices, weights, 1000.0, 0.0, 0.0, 0.0, 0.0, True, 1
+    )
+
+    assert holdings.loc[index[-1], "AAA"] == 0.0
+    assert ledger.loc[index[-1], "returns"] == -1.0
+
+
 def test_risk_diagnostics_and_period_filters_are_available() -> None:
     index = pd.date_range("2018-01-01", periods=160, freq="B")
     prices = pd.DataFrame(

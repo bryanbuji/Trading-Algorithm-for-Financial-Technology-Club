@@ -28,10 +28,24 @@ def run_backtest(
     half_spread_bps: float,
     slippage_bps: float,
     market_impact_bps: float,
+    liquidate_trailing_missing: bool = True,
+    trailing_missing_days: int = 5,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    returns = prices.pct_change(fill_method=None).fillna(0)
+    returns = prices.ffill().pct_change(fill_method=None).fillna(0)
     weights = target_weights.reindex(prices.index).ffill().fillna(0)
     weights = weights.reindex(columns=prices.columns, fill_value=0)
+    if liquidate_trailing_missing:
+        for symbol in prices.columns:
+            valid_dates = prices[symbol].dropna().index
+            if valid_dates.empty:
+                weights[symbol] = 0.0
+                continue
+            last_valid = valid_dates[-1]
+            trailing = prices.index > last_valid
+            if trailing.sum() >= trailing_missing_days:
+                first_missing = prices.index[trailing][0]
+                returns.loc[first_missing, symbol] = -1.0
+                weights.loc[trailing, symbol] = 0.0
     turnover = weights.diff().abs().sum(axis=1).fillna(weights.abs().sum(axis=1))
     cost_rate = (commission_bps + half_spread_bps + slippage_bps + market_impact_bps) / 10000
     gross_returns = (weights.shift(1).fillna(0) * returns).sum(axis=1)
@@ -90,7 +104,14 @@ def build_trade_ledger(
             weight_after = float(weights.loc[date, symbol])
             portfolio_value = float(equity.shift(1).reindex([date]).fillna(equity.iloc[0]).iloc[0])
             notional = abs(float(weight_change)) * portfolio_value
-            quantity = notional / float(prices.loc[date, symbol])
+            raw_price = prices.loc[date, symbol]
+            execution_price = float(raw_price) if pd.notna(raw_price) else 0.0
+            quantity_price = (
+                float(raw_price)
+                if pd.notna(raw_price)
+                else float(prices[symbol].loc[:date].ffill().iloc[-1])
+            )
+            quantity = notional / quantity_price
             realized_profit_loss = 0.0
             if weight_change > 0:
                 previous_quantity = position_quantity.get(symbol, 0.0)
@@ -102,7 +123,7 @@ def build_trade_ledger(
             else:
                 realized_quantity = min(quantity, position_quantity.get(symbol, 0.0))
                 realized_profit_loss = realized_quantity * (
-                    float(prices.loc[date, symbol]) - average_cost.get(symbol, float(prices.loc[date, symbol]))
+                    execution_price - average_cost.get(symbol, quantity_price)
                 )
                 position_quantity[symbol] = max(position_quantity.get(symbol, 0.0) - quantity, 0.0)
                 if position_quantity[symbol] == 0:
@@ -117,7 +138,7 @@ def build_trade_ledger(
                     "weight_before": float(weight_after - weight_change),
                     "weight_after": weight_after,
                     "weight_change": float(weight_change),
-                    "execution_price": float(prices.loc[date, symbol]),
+                    "execution_price": execution_price,
                     "notional": notional,
                     "estimated_cost": notional * cost_rate,
                     "realized_profit_loss": realized_profit_loss,

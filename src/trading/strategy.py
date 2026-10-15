@@ -51,7 +51,11 @@ def weekly_momentum_weights(
     daily_returns = prices.pct_change(fill_method=None)
     momentum = prices.shift(skip_days).div(prices.shift(lookback_days)).sub(1)
     volatility = (
-        daily_returns.rolling(volatility_days).std() * np.sqrt(252)
+        daily_returns.rolling(
+            volatility_days,
+            min_periods=min(20, volatility_days),
+        ).std()
+        * np.sqrt(252)
     ).ffill()
     momentum = momentum.reindex(weekly.index, method="ffill")
     volatility = volatility.reindex(weekly.index, method="ffill")
