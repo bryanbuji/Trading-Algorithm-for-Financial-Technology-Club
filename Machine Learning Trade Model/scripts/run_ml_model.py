@@ -25,7 +25,9 @@ from trading.strategy import weekly_momentum_weights
 
 config = load_config(root / "config.yaml")
 prices = load_prices(root / "data" / "processed" / "prices.parquet")
-predictions, quality = walk_forward_predictions(prices, config["benchmark"])
+predictions, quality = walk_forward_predictions(
+    prices, config["benchmark"], frequency=config["frequency"]
+)
 weights = weekly_momentum_weights(
     prices,
     config["benchmark"],
@@ -41,6 +43,7 @@ weights = weekly_momentum_weights(
     config["drawdown_full_defense"],
     expected_returns=predictions,
     volatility_target=config["volatility_target"],
+    rebalance_frequency=config["frequency"],
 )
 ledger, holdings, trades = run_backtest(
     prices,

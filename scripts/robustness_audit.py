@@ -37,6 +37,7 @@ builder = lambda frame, benchmark: weekly_momentum_weights(
     config["drawdown_start"],
     config["drawdown_full_defense"],
     volatility_target=config["volatility_target"],
+    rebalance_frequency=config["frequency"],
 )
 
 weights = builder(prices, config["benchmark"])

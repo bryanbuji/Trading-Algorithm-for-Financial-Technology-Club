@@ -1,6 +1,7 @@
 start_date: "2012-01-01"
 end_date: null
 initial_capital: 100000
+# Use "D" for daily rebalancing, or "W-FRI" for weekly Friday rebalancing.
 frequency: "W-FRI"
 signal_execution_lag_days: 1
 direction: "long_only"
@@ -58,17 +59,12 @@ symbols:
   - XLV
   - XLY
 historical_symbols:
-  # Examples of failed, acquired, or delisted securities. Yahoo availability
-  # varies; a point-in-time security master is preferred for production use.
-  - LEH
-  - BSC
-  - WAMUQ
-  - ENRNQ
-  - WCOMQ
-  - GM
-  - C
-  - FNM
-  - FRE
+  # Post-2012 failures/delistings. Provider coverage must be verified before
+  # inclusion; pre-2012 collapses are outside this backtest's sample.
+  - SIVB
+  - SI
+  - FRC
+  - BBBYQ
 alpha_vantage_symbols: []
 asset_classes:
   equities:

@@ -24,40 +24,30 @@ python3.15 --version
 
 ## One-time setup
 
-Run these commands from Terminal after cloning the repository:
+Run these commands from Terminal after cloning the repository. The project
+does not require an Alpha Vantage key. The project-local `.venv` is ignored by
+Git and must be created locally on each computer:
 
 ```sh
 git clone <repository-url>
 cd Trading-Algorithm-for-Financial-Technology-Club
 python3.15 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m pip install lean==1.0.229
-python -m ipykernel install --user \
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m ipykernel install --user \
   --name trading-research \
   --display-name "Python (trading-research)"
 ```
 
-If `.venv` already exists, verify it uses Python 3.15 before reusing it. The
-virtual environment is intentionally excluded from Git and must be created
-locally on each computer. The pandas 3.x dependency requires Python 3.15 in
-this project setup.
+The pandas 3.x dependency requires Python 3.15 in this project setup. Remove
+the local environment only when you intentionally want to recreate it.
 
 ## Start JupyterLab
 
-With the virtual environment activated:
+Start JupyterLab with the project environment:
 
 ```sh
 cd Trading-Algorithm-for-Financial-Technology-Club
-source .venv/bin/activate
-jupyter lab
-```
-
-If your shell says `jupyter: command not found`, bypass shell `PATH`
-configuration and run:
-
-```sh
 .venv/bin/python -m jupyterlab
 ```
 
@@ -88,6 +78,85 @@ returns, trade count, traded notional, P/L, drawdown, exposure, volatility,
 positions, concentration, and Sharpe.
 The optional ML workflow has its own notebook, runner, and dependency file in
 [Machine Learning Trade Model/](./Machine%20Learning%20Trade%20Model/README.md).
+
+### Minimal command-line workflow
+
+The following commands download the Yahoo Finance cache, run the tests, run
+the direct backtest, and run the robustness audit. None of these commands
+requires Alpha Vantage:
+
+```sh
+cd Trading-Algorithm-for-Financial-Technology-Club
+
+# Download the configured Yahoo Finance universe.
+PYTHONPATH=src .venv/bin/python - <<'PY'
+from trading.config import load_config
+from trading.data import configured_symbols, download_prices
+
+config = load_config()
+download_prices(configured_symbols(config), config["start_date"])
+PY
+
+# Verify the project.
+PYTHONPATH=src .venv/bin/python -m pytest -q tests
+
+# Run the backtest and print its performance report.
+PYTHONPATH=src .venv/bin/python - <<'PY'
+from trading.config import load_config
+from trading.data import load_prices
+from trading.strategy import weekly_momentum_weights
+from trading.backtest import format_performance_report, run_backtest
+
+config = load_config()
+prices = load_prices()
+weights = weekly_momentum_weights(
+    prices,
+    config["benchmark"],
+    config["top_n"],
+    config["lookback_days"],
+    config["skip_days"],
+    config["volatility_days"],
+    config["max_position_weight"],
+    config["max_equity_exposure"],
+    config["defensive_exposure"],
+    config["stop_loss_pct"],
+    config["drawdown_start"],
+    config["drawdown_full_defense"],
+    rebalance_frequency=config["frequency"],
+)
+ledger, holdings, trades = run_backtest(
+    prices,
+    weights,
+    config["initial_capital"],
+    config["commission_bps"],
+    config["half_spread_bps"],
+    config["slippage_bps"],
+    config["market_impact_bps"],
+)
+print(format_performance_report(ledger, config["initial_capital"]))
+print(f"Trades recorded: {len(trades):,}")
+PY
+
+# Run look-ahead, regime, benchmark, and cost-sensitivity checks.
+PYTHONPATH=src .venv/bin/python scripts/robustness_audit.py
+```
+
+If the Yahoo cache already exists, omit the download command and run the
+tests, backtest, or notebooks directly.
+
+### Switch to daily rebalancing
+
+Edit [config.yaml](./config.yaml) and change:
+
+```yaml
+frequency: "D"
+```
+
+`"D"` means rebalance on every available trading date. The default
+`"W-FRI"` means rebalance using Friday observations. The strategy, the ML
+feature panel, the ML predictions, and the audit scripts read this setting.
+After changing it, rerun the backtest or ML command; no data-download change
+is required.
 
 The rules notebook supports `conservative`, `balanced`, and `aggressive`
 risk profiles. Set `risk_profile` in its first code cell and rerun all cells.
@@ -225,10 +294,12 @@ The optional adapters are in
 research data with:
 
 ```sh
-# Add Alpha Vantage adjusted prices to the existing Yahoo cache.
+# Optional only: add Alpha Vantage adjusted prices to the existing Yahoo cache.
+# The normal download, notebooks, tests, and backtest work without this.
 export ALPHAVANTAGE_API_KEY="your-key"
 PYTHONPATH=src python3.15 scripts/download_open_data.py \
-  --merge-alpha-symbol LEH
+  --merge-alpha-symbol SIVB \
+  --merge-alpha-symbol FRC
 ```
 
 The merge adds missing symbols and fills missing observations without
@@ -239,8 +310,8 @@ the same merge automatically after downloading Yahoo prices.
 
 ```yaml
 alpha_vantage_symbols:
-  - LEH
-  - WAMUQ
+  - SIVB
+  - FRC
 ```
 
 # FRED benchmark/macro series; no FRED API key is required for CSV downloads.

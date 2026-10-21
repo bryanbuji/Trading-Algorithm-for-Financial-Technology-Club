@@ -52,6 +52,18 @@ def test_trailing_missing_price_is_liquidated_at_zero() -> None:
     assert ledger.loc[index[-1], "returns"] == -1.0
 
 
+def test_trade_pnl_remains_finite_when_entry_price_is_missing() -> None:
+    index = pd.date_range("2020-01-01", periods=3, freq="D")
+    prices = pd.DataFrame({"AAA": [10.0, float("nan"), 12.0]}, index=index)
+    weights = pd.DataFrame({"AAA": [0.0, 0.5, 0.0]}, index=index)
+
+    _, _, trades = run_backtest(prices, weights, 1000.0, 0.0, 0.0, 0.0, 0.0)
+
+    assert trades["cumulative_net_profit_loss"].notna().all()
+    assert trades["net_profit_loss"].notna().all()
+    assert trades.iloc[-1]["cumulative_net_profit_loss"] == 83.33333333333333
+
+
 def test_risk_diagnostics_and_period_filters_are_available() -> None:
     index = pd.date_range("2018-01-01", periods=160, freq="B")
     prices = pd.DataFrame(

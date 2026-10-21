@@ -1,7 +1,7 @@
 # Machine Learning Trade Model
 
-This optional workflow evaluates a regularized Ridge model against the shared
-weekly backtesting infrastructure. It uses lagged momentum, volatility,
+This optional workflow evaluates a linear regression model against the shared
+backtesting infrastructure. It uses lagged momentum, volatility,
 relative-strength, and benchmark-volatility features and trains
 chronologically to avoid look-ahead leakage.
 
@@ -18,7 +18,9 @@ python -m pip install -r "Machine Learning Trade Model/requirements.txt"
 ```
 
 The ML workflow uses the parent project's cached prices. Download them first
-with `notebooks/01_data_download.ipynb`.
+with `notebooks/01_data_download.ipynb`. It follows the `frequency` value in
+the parent `config.yaml`, so changing that value also changes ML feature
+sampling and portfolio rebalancing.
 
 ## Run
 
@@ -38,3 +40,6 @@ The model is for educational research only. Its out-of-sample correlation is
 not evidence that future returns are predictable, and the shared dataset uses
 current S&P 500 constituents across history, which introduces survivorship
 bias.
+
+See [LEARNING_METHOD.md](./LEARNING_METHOD.md) for the model type, features,
+target, and walk-forward training method.

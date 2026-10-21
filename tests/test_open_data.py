@@ -50,6 +50,18 @@ def test_alpha_prices_expand_yahoo_cache_without_replacing_values(monkeypatch) -
     assert result.loc["2020-01-03", "ABC"] == 3.0
 
 
+def test_alpha_merge_skips_unavailable_symbol(monkeypatch) -> None:
+    yahoo = pd.DataFrame({"ABC": [1.0]}, index=pd.date_range("2020-01-01", periods=1))
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("no daily series")
+
+    monkeypatch.setattr(open_data, "alpha_vantage_daily_adjusted", unavailable)
+    with pytest.warns(RuntimeWarning, match="Skipping Alpha Vantage symbol"):
+        result = open_data.merge_alpha_vantage_prices(yahoo, ["MISSING"])
+    assert result.equals(yahoo)
+
+
 def test_fred_parses_public_csv(monkeypatch) -> None:
     class Response:
         def __enter__(self):

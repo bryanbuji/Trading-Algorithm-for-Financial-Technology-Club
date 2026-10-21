@@ -118,7 +118,7 @@ def build_trade_ledger(
                 previous_cost = average_cost.get(symbol, 0.0)
                 position_quantity[symbol] = previous_quantity + quantity
                 average_cost[symbol] = (
-                    (previous_quantity * previous_cost) + (quantity * float(prices.loc[date, symbol]))
+                    (previous_quantity * previous_cost) + (quantity * quantity_price)
                 ) / position_quantity[symbol]
             else:
                 realized_quantity = min(quantity, position_quantity.get(symbol, 0.0))

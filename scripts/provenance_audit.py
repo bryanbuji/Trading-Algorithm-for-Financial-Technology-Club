@@ -48,10 +48,11 @@ weights = weekly_momentum_weights(
     config["drawdown_start"],
     config["drawdown_full_defense"],
     volatility_target=config["volatility_target"],
+    rebalance_frequency=config["frequency"],
 )
 rebalance_dates = weights.index[weights.diff().abs().sum(axis=1) > 0]
 daily_rebalance_dates = prices.index.intersection(rebalance_dates)
 print("\nSIGNAL TIMING")
-print(f"Weekly signal dates: {len(rebalance_dates):,}")
+print(f"Configured signal dates: {len(rebalance_dates):,}")
 print(f"Signals coinciding with daily observations: {len(daily_rebalance_dates):,}")
-print("The pandas engine applies Friday weights to the next available daily return.")
+print("The pandas engine applies each signal's weights to the next available daily return.")

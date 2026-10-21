@@ -2,11 +2,15 @@ from typing import Dict, Tuple
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import LinearRegression
 
 
-def build_feature_panel(prices: pd.DataFrame, benchmark: str) -> Tuple[pd.DataFrame, pd.Series]:
-    prices = prices.resample("W-FRI").last().replace([np.inf, -np.inf], np.nan)
+def build_feature_panel(
+    prices: pd.DataFrame,
+    benchmark: str,
+    frequency: str = "W-FRI",
+) -> Tuple[pd.DataFrame, pd.Series]:
+    prices = prices.resample(frequency).last().replace([np.inf, -np.inf], np.nan)
     prices = prices.where(prices > 0).ffill()
     returns = prices.pct_change(fill_method=None)
     benchmark_return = returns[benchmark]
@@ -48,14 +52,13 @@ def walk_forward_predictions(
     benchmark: str,
     min_train_days: int = 260,
     retrain_days: int = 13,
+    frequency: str = "W-FRI",
 ) -> Tuple[pd.DataFrame, Dict[str, float]]:
-    panel, target = build_feature_panel(prices, benchmark)
+    panel, target = build_feature_panel(prices, benchmark, frequency)
     feature_names = list(panel.columns)
     dates = sorted(panel.index.get_level_values("date").unique())
     predictions = []
-    # Features are already clipped to bounded ranges. The iterative solver
-    # avoids the dense standardized matmul overflow seen on long histories.
-    model = Ridge(alpha=1.0, solver="lsqr")
+    model = LinearRegression()
     for index, date in enumerate(dates):
         if index < min_train_days or index % retrain_days != 0:
             continue

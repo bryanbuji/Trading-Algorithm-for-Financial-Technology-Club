@@ -44,10 +44,14 @@ def weekly_momentum_weights(
     excluded_symbols: Optional[list[str]] = None,
     include_benchmark: bool = False,
     benchmark_fallback: bool = False,
+    rebalance_frequency: str = "W-FRI",
 ) -> pd.DataFrame:
     if benchmark not in prices:
         raise KeyError(f"Benchmark {benchmark!r} is missing from prices")
-    weekly = prices.resample("W-FRI").last().ffill()
+    if rebalance_frequency == "D":
+        weekly = prices.ffill()
+    else:
+        weekly = prices.resample(rebalance_frequency).last().ffill()
     daily_returns = prices.pct_change(fill_method=None)
     momentum = prices.shift(skip_days).div(prices.shift(lookback_days)).sub(1)
     volatility = (

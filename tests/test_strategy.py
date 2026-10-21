@@ -74,3 +74,26 @@ def test_recent_missing_observation_does_not_zero_all_signals() -> None:
         stop_loss_pct=1.0,
     )
     assert weights.iloc[-1]["AAA"] > 0
+
+
+def test_daily_rebalancing_uses_daily_index() -> None:
+    index = pd.date_range("2012-01-01", periods=80, freq="B")
+    prices = pd.DataFrame(
+        {
+            "SPY": 100 * (1.001 ** pd.Series(range(len(index)), index=index)),
+            "AAA": 50 * (1.002 ** pd.Series(range(len(index)), index=index)),
+        },
+        index=index,
+    )
+
+    weights = weekly_momentum_weights(
+        prices,
+        "SPY",
+        top_n=1,
+        lookback_days=20,
+        skip_days=5,
+        volatility_days=10,
+        rebalance_frequency="D",
+    )
+
+    assert weights.index.equals(index)

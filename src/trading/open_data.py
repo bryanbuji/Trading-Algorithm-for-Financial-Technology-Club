@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import warnings
 from datetime import date
 from typing import Any, Optional, Union
 from urllib.error import HTTPError
@@ -75,7 +76,15 @@ def merge_alpha_vantage_prices(
     """Add Alpha Vantage histories to the Yahoo cache without replacing Yahoo data."""
     result = yahoo_prices.copy()
     for symbol in dict.fromkeys(symbols):
-        alpha_prices = alpha_vantage_daily_adjusted(symbol, api_key=api_key)
+        try:
+            alpha_prices = alpha_vantage_daily_adjusted(symbol, api_key=api_key)
+        except RuntimeError as error:
+            warnings.warn(
+                f"Skipping Alpha Vantage symbol {symbol}: {error}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
         alpha_frame = alpha_prices.to_frame()
         if symbol in result:
             result = result.combine_first(alpha_frame)
