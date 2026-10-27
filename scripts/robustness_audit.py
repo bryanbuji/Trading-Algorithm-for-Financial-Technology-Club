@@ -49,6 +49,7 @@ ledger, _, _ = run_backtest(
     config["half_spread_bps"],
     config["slippage_bps"],
     config["market_impact_bps"],
+    execution_lag_days=config["signal_execution_lag_days"],
 )
 benchmark = buy_and_hold_backtest(
     prices,

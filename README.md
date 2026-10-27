@@ -76,6 +76,11 @@ and cumulative net profit/loss. It also shows configurable full-history,
 arbitrary date-range, annual, monthly, and five-year views for equity,
 returns, trade count, traded notional, P/L, drawdown, exposure, volatility,
 positions, concentration, and Sharpe.
+The trade ledger also includes signed executed `cash_flow` and
+`cumulative_cash_flow` columns. Use these for cash-movement auditing; buys are
+negative cash flow and sells are positive cash flow after estimated costs.
+The notebook includes a 12-bar monthly cash-flow chart whose year can be
+changed in the `plot_monthly_cash_flow(trades, year=...)` call.
 The optional ML workflow has its own notebook, runner, and dependency file in
 [Machine Learning Trade Model/](./Machine%20Learning%20Trade%20Model/README.md).
 
@@ -132,6 +137,7 @@ ledger, holdings, trades = run_backtest(
     config["half_spread_bps"],
     config["slippage_bps"],
     config["market_impact_bps"],
+    execution_lag_days=config["signal_execution_lag_days"],
 )
 print(format_performance_report(ledger, config["initial_capital"]))
 print(f"Trades recorded: {len(trades):,}")
@@ -142,7 +148,10 @@ PYTHONPATH=src .venv/bin/python scripts/robustness_audit.py
 ```
 
 If the Yahoo cache already exists, omit the download command and run the
-tests, backtest, or notebooks directly.
+tests, backtest, or notebooks directly. In JupyterLab, use **Kernel →
+Restart Kernel and Run All Cells** after changing `config.yaml`; rerunning
+only the final plotting cells reuses the previous `weights`, `ledger`, and
+`trades` variables.
 
 ### Switch to daily rebalancing
 
@@ -160,6 +169,10 @@ is required.
 
 The rules notebook supports `conservative`, `balanced`, and `aggressive`
 risk profiles. Set `risk_profile` in its first code cell and rerun all cells.
+The selected profile overrides `top_n`, exposure, position limits, volatility
+target, and stop-loss settings where it defines them. Change those values in
+the selected profile, or set `risk_profile` to a profile with the desired
+values; changing only the top-level copy will not override a profile value.
 The profile changes exposure, position caps, volatility targeting, and
 stop-loss tolerance; it does not change the signal universe.
 

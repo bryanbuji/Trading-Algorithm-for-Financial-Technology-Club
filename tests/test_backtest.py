@@ -35,8 +35,9 @@ def test_backtest_records_position_changes() -> None:
     assert trades["side"].tolist() == ["BUY", "SELL", "BUY"]
     assert trades["symbol"].tolist() == ["AAA", "AAA", "AAA"]
     assert trades["notional"].round(3).tolist() == [500.0, 500.0, 262.488]
-    assert trades["net_profit_loss"].round(3).tolist() == [0.0, 45.405, 0.0]
-    assert trades["profit_loss_pct"].round(3).tolist() == [0.0, 0.091, 0.0]
+    assert trades["net_profit_loss"].round(3).tolist() == [-0.05, 45.405, -0.026]
+    assert trades["profit_loss_pct"].round(4).tolist() == [-0.0001, 0.0908, -0.0001]
+    assert trades["cash_flow"].round(3).tolist() == [-500.05, 499.95, -262.514]
 
 
 def test_trailing_missing_price_is_liquidated_at_zero() -> None:
@@ -50,6 +51,19 @@ def test_trailing_missing_price_is_liquidated_at_zero() -> None:
 
     assert holdings.loc[index[-1], "AAA"] == 0.0
     assert ledger.loc[index[-1], "returns"] == -1.0
+
+
+def test_execution_lag_is_configurable() -> None:
+    index = pd.date_range("2020-01-01", periods=3, freq="D")
+    prices = pd.DataFrame({"AAA": [10.0, 11.0, 12.0]}, index=index)
+    weights = pd.DataFrame({"AAA": [1.0, 0.0, 0.0]}, index=index)
+
+    one_day, _, _ = run_backtest(prices, weights, 1000.0, 0.0, 0.0, 0.0, 0.0)
+    two_days, _, _ = run_backtest(
+        prices, weights, 1000.0, 0.0, 0.0, 0.0, 0.0, execution_lag_days=2
+    )
+
+    assert one_day["equity"].iloc[-1] > two_days["equity"].iloc[-1]
 
 
 def test_trade_pnl_remains_finite_when_entry_price_is_missing() -> None:

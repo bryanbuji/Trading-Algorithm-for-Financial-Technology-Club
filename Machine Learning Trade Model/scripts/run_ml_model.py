@@ -53,6 +53,7 @@ ledger, holdings, trades = run_backtest(
     config["half_spread_bps"],
     config["slippage_bps"],
     config["market_impact_bps"],
+    execution_lag_days=config["signal_execution_lag_days"],
 )
 print("ML MODEL QUALITY")
 print(f"Out-of-sample observations: {quality['observations']:,.0f}")

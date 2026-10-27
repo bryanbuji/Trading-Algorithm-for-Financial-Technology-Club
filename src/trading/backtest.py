@@ -17,6 +17,8 @@ TRADE_COLUMNS = [
     "net_profit_loss",
     "profit_loss_pct",
     "cumulative_net_profit_loss",
+    "cash_flow",
+    "cumulative_cash_flow",
 ]
 
 
@@ -30,7 +32,10 @@ def run_backtest(
     market_impact_bps: float,
     liquidate_trailing_missing: bool = True,
     trailing_missing_days: int = 5,
+    execution_lag_days: int = 1,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    if execution_lag_days < 0:
+        raise ValueError("execution_lag_days must be non-negative")
     returns = prices.ffill().pct_change(fill_method=None).fillna(0)
     weights = target_weights.reindex(prices.index).ffill().fillna(0)
     weights = weights.reindex(columns=prices.columns, fill_value=0)
@@ -48,7 +53,7 @@ def run_backtest(
                 weights.loc[trailing, symbol] = 0.0
     turnover = weights.diff().abs().sum(axis=1).fillna(weights.abs().sum(axis=1))
     cost_rate = (commission_bps + half_spread_bps + slippage_bps + market_impact_bps) / 10000
-    gross_returns = (weights.shift(1).fillna(0) * returns).sum(axis=1)
+    gross_returns = (weights.shift(execution_lag_days).fillna(0) * returns).sum(axis=1)
     net_returns = gross_returns - turnover * cost_rate
     equity = initial_capital * (1 + net_returns).cumprod()
     ledger = pd.DataFrame({"returns": net_returns, "turnover": turnover, "equity": equity})
@@ -99,6 +104,7 @@ def build_trade_ledger(
     position_quantity = {}
     average_cost = {}
     cumulative_profit_loss = 0.0
+    cumulative_cash_flow = 0.0
     for date, row in changes.iterrows():
         for symbol, weight_change in row[row.abs() > 1e-12].items():
             weight_after = float(weights.loc[date, symbol])
@@ -128,8 +134,15 @@ def build_trade_ledger(
                 position_quantity[symbol] = max(position_quantity.get(symbol, 0.0) - quantity, 0.0)
                 if position_quantity[symbol] == 0:
                     average_cost.pop(symbol, None)
-            net_profit_loss = realized_profit_loss - (notional * cost_rate if weight_change < 0 else 0.0)
+            transaction_cost = notional * cost_rate
+            net_profit_loss = realized_profit_loss - transaction_cost
+            cash_flow = (
+                quantity * execution_price - transaction_cost
+                if weight_change < 0
+                else -(quantity * quantity_price + transaction_cost)
+            )
             cumulative_profit_loss += net_profit_loss
+            cumulative_cash_flow += cash_flow
             records.append(
                 {
                     "date": date,
@@ -140,11 +153,13 @@ def build_trade_ledger(
                     "weight_change": float(weight_change),
                     "execution_price": execution_price,
                     "notional": notional,
-                    "estimated_cost": notional * cost_rate,
+                    "estimated_cost": transaction_cost,
                     "realized_profit_loss": realized_profit_loss,
                     "net_profit_loss": net_profit_loss,
                     "profit_loss_pct": net_profit_loss / notional if notional else 0.0,
                     "cumulative_net_profit_loss": cumulative_profit_loss,
+                    "cash_flow": cash_flow,
+                    "cumulative_cash_flow": cumulative_cash_flow,
                 }
             )
     return pd.DataFrame.from_records(records, columns=TRADE_COLUMNS)

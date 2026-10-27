@@ -22,6 +22,49 @@ def period_returns(ledger: pd.DataFrame, frequency: str = "Y") -> pd.Series:
     return ledger["equity"].resample(frequency).last().pct_change().dropna()
 
 
+def monthly_cash_flow(trades: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate executed trade cash movements by calendar month."""
+    columns = ["cash_flow", "net_profit_loss", "estimated_cost", "trade_count"]
+    if trades.empty:
+        return pd.DataFrame(columns=columns, index=pd.DatetimeIndex([], name="month"))
+    frame = trades.copy()
+    frame["date"] = pd.to_datetime(frame["date"])
+    frame = frame.set_index("date")
+    if "cash_flow" not in frame:
+        raise ValueError("Trades must include a cash_flow column")
+    result = frame.resample("ME")["cash_flow"].sum().to_frame()
+    for column in ("net_profit_loss", "estimated_cost"):
+        result[column] = (
+            frame[column].resample("ME").sum()
+            if column in frame
+            else 0.0
+        )
+    result["trade_count"] = frame.resample("ME").size()
+    result.index.name = "month"
+    return result
+
+
+def plot_monthly_cash_flow(
+    trades: pd.DataFrame,
+    year: int,
+) -> Tuple[plt.Figure, "object"]:
+    """Plot one calendar year's cash flow as a 12-column monthly bar chart."""
+    monthly = monthly_cash_flow(trades)
+    year_index = pd.date_range(f"{year}-01-01", periods=12, freq="ME")
+    values = monthly["cash_flow"].reindex(year_index, fill_value=0.0)
+    figure, axis = plt.subplots(figsize=(14, 5))
+    colors = ["green" if value >= 0 else "red" for value in values]
+    axis.bar(range(1, 13), values.values, color=colors)
+    axis.axhline(0, color="black", linewidth=0.8)
+    axis.set_xticks(range(1, 13))
+    axis.set_xlabel("Month")
+    axis.set_ylabel("Executed cash flow ($)")
+    axis.set_title(f"Monthly executed cash flow: {year}")
+    axis.grid(axis="y", alpha=0.25)
+    figure.tight_layout()
+    return figure, axis
+
+
 def plot_diagnostics(
     ledger: pd.DataFrame,
     trades: pd.DataFrame,
