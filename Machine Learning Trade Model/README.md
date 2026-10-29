@@ -3,7 +3,9 @@
 This optional workflow evaluates a linear regression model against the shared
 backtesting infrastructure. It uses lagged momentum, volatility,
 relative-strength, and benchmark-volatility features and trains
-chronologically to avoid look-ahead leakage.
+chronologically with a 21-observation purge so training labels do not reach
+into each prediction date. This avoids one identified label-overlap leak, but
+does not make the model or strategy robust to selection bias or tuning.
 
 ## Setup
 
@@ -34,12 +36,16 @@ PYTHONPATH=src:"Machine Learning Trade Model/src" \
 Or start JupyterLab and open
 `Machine Learning Trade Model/notebooks/ml_trade_model.ipynb`. The notebook
 locates the parent project automatically and displays model quality,
-performance, risk, trade, and period-return charts.
+performance, risk, trade, and period-return charts. It saves the complete trade
+ledger to ignored `data/processed/ml_trades.csv` and renders a formatted
+100-row preview.
 
-The model is for educational research only. Its out-of-sample correlation is
-not evidence that future returns are predictable, and the shared dataset uses
-current S&P 500 constituents across history, which introduces survivorship
-bias.
+The target is a 21-bar future return at the configured frequency (21 weeks
+when weekly, 21 sessions when daily). Prediction dates are sparse because the
+model retrains every 13 bars; overlapping target windows make the reported
+correlation descriptive, not a statistical significance test. The shared
+price cache uses a selected ETF list, not point-in-time ETF membership or
+complete delisted-security data, so survivorship bias remains.
 
 See [LEARNING_METHOD.md](./LEARNING_METHOD.md) for the model type, features,
 target, and walk-forward training method.

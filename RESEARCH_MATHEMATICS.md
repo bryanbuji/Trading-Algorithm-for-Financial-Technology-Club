@@ -17,24 +17,27 @@ $$
 r_{i,t} = \frac{P_{i,t}}{P_{i,t-1}} - 1.
 $$
 
-Signals are sampled weekly using Friday observations. The strategy does not
-use the return from the signal date to represent a same-day fill. Backtest
-returns use the prior day's holdings:
+Signals are sampled weekly using Friday observations. A signal is filled at
+the next available daily close when `signal_execution_lag_days` is one; the
+close-to-close return is earned after that fill. This is a daily-close
+approximation, not an open-price execution simulation. If $h_{i,t}$ is the
+position held after the fill on day $t$, backtest returns use the prior day's
+holdings:
 
 $$
 r_{p,t}^{\text{gross}} =
-\sum_i w_{i,t-1}r_{i,t}.
+\sum_i h_{i,t-1}r_{i,t}.
 $$
 
 This one-period lag is intended to prevent trading at a price that was not
 available when the signal was calculated.
 
-The current dataset contains current S&P 500 constituents, non-S&P ETFs,
-forex, bonds, commodities, and a small explicit list of failed or delisted
-symbols. The latter list is not a survivorship-bias-free security master:
-Yahoo Finance does not provide complete histories for every failed security.
-Current constituents applied backward through history still create
-survivorship bias.
+The default configuration uses a selected set of ETFs and a small list of
+failed equities; it no longer adds today's S&P 500 membership across the full
+history. This reduces single-stock survivorship bias, but the ETF list and
+failed-symbol coverage are not point-in-time complete. Yahoo Finance does not
+provide the historical membership, security identity, and delisting-return
+records needed for a survivorship-controlled stock universe.
 
 ## 2. Momentum signal
 
@@ -196,10 +199,11 @@ c_{\text{slippage}}+
 c_{\text{impact}}.
 $$
 
-The decimal cost rate is $c=c_{\text{bps}}/10{,}000$. Portfolio turnover is:
+The decimal cost rate is $c=c_{\text{bps}}/10{,}000$. Portfolio turnover is
+measured on execution dates, after applying the configured signal lag:
 
 $$
-\tau_t = \sum_i |w_{i,t}-w_{i,t-1}|.
+\tau_t = \sum_i |h_{i,t}-h_{i,t-1}|.
 $$
 
 The backtest subtracts estimated costs:
@@ -207,8 +211,14 @@ The backtest subtracts estimated costs:
 $$
 r_{p,t}^{\text{net}}
  =
-r_{p,t}^{\text{gross}}-\tau_t c.
+\max(-1, r_{p,t}^{\text{gross}}-\tau_t c).
 $$
+
+The floor represents a long-only account losing all its equity; portfolio
+equity cannot become negative from a total-loss liquidation plus costs. Target
+weights above 100% exposure or negative weights are rejected. This is not a
+cash-and-shares event ledger: portfolio returns are authoritative, while the
+trade ledger is an approximate notional/P&L breakdown.
 
 Current default assumptions are 1.0 bps commission, 2.5 bps half-spread,
 5.0 bps slippage, and 2.0 bps market impact, totaling 10.5 bps per unit of
@@ -322,11 +332,11 @@ The displayed forecast Sharpe is currently the same expected
 profit-to-expected-loss ratio. It is an ex-ante proxy, not a realized Sharpe
 ratio and not a calibrated probability forecast.
 
-## 9. Validation tests currently run
+## 9. Validation coverage
 
-The repository currently runs nine automated tests with `pytest`.
+The pytest suite covers the following areas:
 
-### Unit and accounting tests
+### Unit and accounting coverage
 
 - Performance report formatting checks dollar and percentage precision.
 - Trade ledger checks buy/sell sides, notional values, realized P/L, and net
@@ -360,10 +370,11 @@ It reports independent results for 2012–2016, 2016–2020, 2020–2023, and
 2023–2026; predefined bull and bear windows; buy-and-hold SPY and QQQ; and
 baseline versus high-cost scenarios.
 
-These tests detect several classes of implementation error, but they do not
-prove the absence of all leakage. They do not replace point-in-time
-constituent data, delisted-security data, walk-forward parameter selection,
-paper trading, or live execution monitoring.
+These checks detect selected implementation errors, but they do not prove the
+absence of all leakage. Earlier return tables are not comparable after fixes
+to execution timing and costs. Point-in-time constituent data, delisted return
+data, walk-forward parameter selection, and an untouched test period are still
+required for credible equity research.
 
 ## 10. Interpreting benchmark comparisons
 

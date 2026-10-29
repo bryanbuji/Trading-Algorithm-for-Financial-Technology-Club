@@ -28,6 +28,15 @@ prices = load_prices(root / "data" / "processed" / "prices.parquet")
 predictions, quality = walk_forward_predictions(
     prices, config["benchmark"], frequency=config["frequency"]
 )
+trade_asset_classes = set(
+    config.values.get("trade_asset_classes", config.values.get("asset_classes", {}))
+)
+excluded_symbols = [
+    symbol
+    for asset_class, symbols in config.values.get("asset_classes", {}).items()
+    if asset_class not in trade_asset_classes
+    for symbol in symbols
+]
 weights = weekly_momentum_weights(
     prices,
     config["benchmark"],
@@ -43,6 +52,8 @@ weights = weekly_momentum_weights(
     config["drawdown_full_defense"],
     expected_returns=predictions,
     volatility_target=config["volatility_target"],
+    excluded_symbols=excluded_symbols,
+    benchmark_fallback=config.values.get("benchmark_fallback", False),
     rebalance_frequency=config["frequency"],
 )
 ledger, holdings, trades = run_backtest(
@@ -58,7 +69,7 @@ ledger, holdings, trades = run_backtest(
 print("ML MODEL QUALITY")
 print(f"Out-of-sample observations: {quality['observations']:,.0f}")
 print(f"Prediction/realized-return correlation: {quality['correlation']:.3f}")
-print("ML-BIASED RANKING MODEL")
+print("ML RANKING MODEL (RESEARCH ONLY)")
 print(format_performance_report(ledger, config["initial_capital"]))
 print(f"Trades recorded: {len(trades):,}")
 print(portfolio_risk_diagnostics(holdings, prices, config["benchmark"]).tail(1))

@@ -18,6 +18,6 @@ def load_config(path: Union[str, Path] = "config.yaml") -> Config:
         values = yaml.safe_load(handle)
     if not isinstance(values, dict):
         raise ValueError(f"Configuration must be a mapping: {path}")
-    if values.get("direction") not in {"long_only", "long_short"}:
-        raise ValueError("direction must be long_only or long_short")
+    if values.get("direction") != "long_only":
+        raise ValueError("direction must be long_only; short selling is not implemented")
     return Config(values)

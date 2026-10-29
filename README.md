@@ -56,7 +56,8 @@ JupyterLab opens in a browser at a localhost URL. In JupyterLab:
 1. Open `notebooks/01_data_download.ipynb`.
 2. Select the `Python (trading-research)` kernel.
 3. Choose **Kernel → Restart Kernel and Run All Cells**.
-4. Confirm that it reports approximately `3,700 dates x 505 symbols`.
+4. Confirm that it prints the current date range and panel dimensions. Counts
+   vary with configured symbols, provider coverage, and listing dates.
 5. Open `notebooks/02_backtest_baseline.ipynb`.
 6. Choose **Kernel → Restart Kernel and Run All Cells**.
 7. In the first code cell, leave `plot_start` and `plot_end` as `None` to
@@ -66,19 +67,20 @@ JupyterLab opens in a browser at a localhost URL. In JupyterLab:
 
 The first notebook downloads adjusted daily prices for the configured
 equities, forex, bonds, commodities, and explicit historical-symbol lists and
-saves them to
-`data/processed/prices.parquet`. The second notebook uses that cached data and
-prints the rules-based report, plots portfolio value
-and drawdown over time, marks buy/sell activity, and displays a table containing every simulated
-trade with its date, symbol, side, weights, execution price, notional value,
-estimated trading cost, realized profit/loss, net profit/loss, trade return,
-and cumulative net profit/loss. It also shows configurable full-history,
+saves them to `data/processed/prices.parquet`. The second notebook uses that
+cache, prints the rules-based report, plots portfolio value and drawdown,
+marks buy/sell activity, and shows a formatted 100-row trade preview with
+execution date, symbol, side, weights, execution price, notional value,
+estimated cost, realized/net P&L, trade return, and cumulative net P&L. It also
+shows configurable full-history,
 arbitrary date-range, annual, monthly, and five-year views for equity,
 returns, trade count, traded notional, P/L, drawdown, exposure, volatility,
 positions, concentration, and Sharpe.
-The trade ledger also includes signed executed `cash_flow` and
+The full ledger is saved to ignored `data/processed/trades.csv` and includes
+signed `cash_flow` and
 `cumulative_cash_flow` columns. Use these for cash-movement auditing; buys are
-negative cash flow and sells are positive cash flow after estimated costs.
+negative cash flow; sells are usually positive after costs, except a zero-value
+delisting exit. These are estimated from weight changes, not a cash balance.
 The notebook includes a 12-bar monthly cash-flow chart whose year can be
 changed in the `plot_monthly_cash_flow(trades, year=...)` call.
 The optional ML workflow has its own notebook, runner, and dependency file in
@@ -86,9 +88,8 @@ The optional ML workflow has its own notebook, runner, and dependency file in
 
 ### Minimal command-line workflow
 
-The following commands download the Yahoo Finance cache, run the tests, run
-the direct backtest, and run the robustness audit. None of these commands
-requires Alpha Vantage:
+The following commands download the Yahoo Finance cache, run the tests, and
+run the robustness audit. None requires Alpha Vantage:
 
 ```sh
 cd Trading-Algorithm-for-Financial-Technology-Club
@@ -104,44 +105,6 @@ PY
 
 # Verify the project.
 PYTHONPATH=src .venv/bin/python -m pytest -q tests
-
-# Run the backtest and print its performance report.
-PYTHONPATH=src .venv/bin/python - <<'PY'
-from trading.config import load_config
-from trading.data import load_prices
-from trading.strategy import weekly_momentum_weights
-from trading.backtest import format_performance_report, run_backtest
-
-config = load_config()
-prices = load_prices()
-weights = weekly_momentum_weights(
-    prices,
-    config["benchmark"],
-    config["top_n"],
-    config["lookback_days"],
-    config["skip_days"],
-    config["volatility_days"],
-    config["max_position_weight"],
-    config["max_equity_exposure"],
-    config["defensive_exposure"],
-    config["stop_loss_pct"],
-    config["drawdown_start"],
-    config["drawdown_full_defense"],
-    rebalance_frequency=config["frequency"],
-)
-ledger, holdings, trades = run_backtest(
-    prices,
-    weights,
-    config["initial_capital"],
-    config["commission_bps"],
-    config["half_spread_bps"],
-    config["slippage_bps"],
-    config["market_impact_bps"],
-    execution_lag_days=config["signal_execution_lag_days"],
-)
-print(format_performance_report(ledger, config["initial_capital"]))
-print(f"Trades recorded: {len(trades):,}")
-PY
 
 # Run look-ahead, regime, benchmark, and cost-sensitivity checks.
 PYTHONPATH=src .venv/bin/python scripts/robustness_audit.py
@@ -176,75 +139,17 @@ values; changing only the top-level copy will not override a profile value.
 The profile changes exposure, position caps, volatility targeting, and
 stop-loss tolerance; it does not change the signal universe.
 
-The allocation logic now redistributes weight after applying position caps.
-Previously, inverse-volatility weights were capped without redistribution,
-which could leave a permitted 100% portfolio exposure with only 50–60%
-invested. That underinvestment was a primary cause of the unexpectedly low
-return and low trade count after the universe expansion.
-Non-positive observations, such as the negative front-month crude-oil futures
-settlement in April 2020, are converted to missing values because ordinary
-percentage-return math is undefined across zero. A futures-specific continuous
-contract model is required to include those observations faithfully.
+The allocator redistributes weight after applying position caps. The default
+universe uses ETFs and omits current S&P 500 constituents projected backward.
+Futures are omitted because front-month contract prices and rolls cannot be
+modeled as ordinary adjusted ETF prices. This reduces, but does not remove,
+survivorship and instrument-history bias.
 
 ## Run without JupyterLab
 
-This command runs the test suite:
-
-```sh
-cd Trading-Algorithm-for-Financial-Technology-Club
-PYTHONPATH=src .venv/bin/python -m pytest -q tests
-```
-
-To run the robustness audit:
-
-```sh
-PYTHONPATH=src .venv/bin/python scripts/robustness_audit.py
-```
-
-The audit checks that future price mutations cannot change earlier signals,
-reports the requested 2012-2016, 2016-2020, 2020-2023, and 2023-2026 windows,
-tests defined bull/bear regimes, compares against buy-and-hold `SPY`, and
-reruns the strategy under higher execution costs.
-
-To run the backtest directly:
-
-```sh
-cd Trading-Algorithm-for-Financial-Technology-Club
-PYTHONPATH=src .venv/bin/python - <<'PY'
-from trading.config import load_config
-from trading.data import load_prices
-from trading.strategy import weekly_momentum_weights
-from trading.backtest import format_performance_report, run_backtest
-
-config = load_config()
-prices = load_prices()
-weights = weekly_momentum_weights(
-    prices,
-    config["benchmark"],
-    config["top_n"],
-    config["lookback_days"],
-    config["skip_days"],
-    config["volatility_days"],
-    config["max_position_weight"],
-    config["max_equity_exposure"],
-    config["defensive_exposure"],
-    config["stop_loss_pct"],
-    config["drawdown_start"],
-    config["drawdown_full_defense"],
-)
-ledger, holdings, trades = run_backtest(
-    prices,
-    weights,
-    config["initial_capital"],
-    config["commission_bps"],
-    config["half_spread_bps"],
-    config["slippage_bps"],
-    config["market_impact_bps"],
-)
-print(format_performance_report(ledger, config["initial_capital"]))
-print(f"Trades recorded: {len(trades):,}")
-PY
-```
+The minimal workflow above covers tests and the robustness audit. The notebook
+uses the same `trading.strategy` and `trading.backtest` functions and displays
+the complete report and charts.
 
 ## Change the experiment
 
@@ -259,36 +164,35 @@ drawdown_start: 0.05
 ```
 
 After changing `symbols` or the asset-class lists, rerun `01_data_download.ipynb`
-before running the backtest. The default universe combines current S&P 500 constituents, broad asset-class
-proxies, additional non-S&P international and thematic ETFs, and a small
-explicit list of historically failed or delisted symbols.
-The failed-symbol list is not comprehensive and Yahoo Finance may not provide
-complete histories for those tickers. Current constituents are still applied
-backward through history, so survivorship bias remains unless a point-in-time
-security master and delisted-price source are supplied.
-When an asset has no observations after a period in which it was held, the
-pandas backtester treats the first date after a five-observation trailing gap as
-a delisting liquidation at zero rather than silently carrying the position at
-an unchanged value. This avoids mistaking a one-day vendor delay for a
-delisting. It does not replace a point-in-time delisted-price feed.
+before running the backtest. The configured universe is a selected set of
+currently available ETFs plus a short list of failed equities. It remains
+survivor-selected: failed ETFs and securities, historical membership, ticker
+changes, and actual delisting returns are incomplete. Five trailing missing
+observations are treated as a total-loss liquidation, a conservative
+placeholder rather than an observed delisting return. Interior gaps are
+forward-filled and can hide stale pricing.
 
-## Free delisted-company data
+## Data sources and survivorship controls
 
 There is no complete, point-in-time, survivorship-bias-free US equity database
 with adjusted prices that is both freely redistributable and available through
 a simple public API. The project therefore does not claim that its Yahoo
 Finance cache is delisted-security data.
 
-Potential free research sources are documented below, but each requires
-validation before use:
+No free Yahoo/Alpha Vantage add-on supplies the complete point-in-time
+membership, identity, corporate-action, and delisting-return history needed
+for a survivorship-controlled stock backtest. For that study, use licensed
+data such as [CRSP US Stock](https://www.crsp.org/research/crsp-us-stock-databases-2025-layout/)
+or [Norgate historical constituent and delisted-security data](https://norgatedata.com/data-content-tables/).
+Verify exchange coverage, effective dates, delisting returns, symbol identity,
+adjustments, and usage rights before integrating either source.
 
-- SEC EDGAR company submissions and filings: free official metadata, but not a
-  ready-made delisted-price database. The integration uses `data.sec.gov` and
-  requires an identifying `SEC_USER_AGENT` containing a name and email.
-- CRSP/Compustat and Norgate: appropriate survivorship-bias-controlled sources,
-  but not free for this use.
-- Stooq and public exchange archives: sometimes retain symbols after delisting,
-  but coverage, corporate actions, and redistribution rights vary.
+Other sources have narrower purposes:
+
+- SEC EDGAR submissions/XBRL: company metadata and filings, not equity prices
+  or membership history. Filing dates must be used to avoid hindsight.
+- Stooq and public exchange archives: some old symbols may be available, but
+  coverage, corporate actions, and usage rights vary.
 - Alpha Vantage: offers a free API tier for optional adjusted prices, but
   requires `ALPHAVANTAGE_API_KEY`, has strict quotas, and does not guarantee
   delisted-company coverage.
@@ -359,31 +263,16 @@ Run the pandas provenance audit before comparing engines:
 PYTHONPATH=src .venv/bin/python scripts/provenance_audit.py
 ```
 
-On the locally downloaded 586-symbol universe, the current profiles produced
-these illustrative results:
+Performance figures from earlier versions are not comparable: portfolio
+accounting, execution-date costs, universe, and ML validation have changed.
+Regenerate results from the current cache and configuration before citing
+them. Treat all risk profiles as exploratory choices, not an out-of-sample
+ranking; select parameters on training data and report untouched test-period
+performance.
 
-| Profile | Total return | Annualized return | Sharpe | Max drawdown |
-| --- | ---: | ---: | ---: | ---: |
-| Conservative | -0.395% | -0.027% | -0.023 | -3.973% |
-| Balanced | 1.755% | 0.118% | 0.080 | -5.172% |
-| Aggressive | 1.890% | 0.127% | 0.088 | -4.751% |
-
-These are not forecasts. They show that the sizing fix improves the result
-from the prior 0.6% run, but the strategy still does not approach the former
-2250% result. The earlier result should remain treated as invalid until it can
-be reproduced with point-in-time data, realistic execution, and independent
-validation.
-
-The aggressive profile is deliberately the highest-return candidate found in
-the current exploratory comparison, but it still does not beat full-period
-buy-and-hold SPY after costs. The project does not silently tune parameters
-against the complete history just to manufacture a benchmark beat; use
-walk-forward optimization before selecting production parameters.
-
-For a serious survivorship-bias study, replace `historical_symbols` with a
-point-in-time universe from CRSP, Compustat, Norgate, or another provider that
-retains delisted securities and corporate actions. Do not interpret the
-hand-curated list as survivorship-bias-free.
+For a serious survivorship-bias study, load point-in-time memberships and
+delisting returns from a suitable provider; adding tickers to
+`historical_symbols` alone cannot correct the universe.
 
 ## Project defaults
 
@@ -394,12 +283,13 @@ hand-curated list as survivorship-bias-free.
 - Position cap: `10%`
 - Maximum equity exposure: `100%`
 - Costs: commission, half-spread, slippage, and market impact
-- Signal execution: next trading day after the Friday close (`1` day lag)
+- Signal execution: next session close (`1` trading-day lag); with daily close
+  data, close-to-close returns begin after the fill
 - Drawdown control: exposure reduces progressively after `10%` drawdown and
   reaches the defensive floor at `25%`
 - Forecast horizon: `21` trading days
 - Volatility target: `20%` annualized
-- Optional ML comparison: a lagged-feature regularized Ridge model evaluated
+- Optional ML comparison: a lagged-feature linear regression model evaluated
   with walk-forward predictions in the separate ML folder
 
 ## Mathematical diagnostics
@@ -427,23 +317,16 @@ requirements and follow [Machine Learning Trade Model/README.md](./Machine%20Lea
 It is intentionally simple and is not evidence that future returns are
 predictable.
 
-## Interpreting the unusually high return
+## Interpreting results
 
-A 3,750% total return over 14 years is approximately a 28% annualized return,
-not a guaranteed 37-fold annual profit rate. It should be treated as a
-research alert, not a result to trust automatically. The default universe is
-the current S&P 500 membership applied backward over the full history. That
-creates survivorship bias because failed, acquired, and removed companies are
-not represented. Yahoo Finance adjusted prices, missing/delisted securities,
-execution timing, liquidity, and simplified market-impact assumptions can also
-materially affect results.
-
-Use the segmented/regime output, leakage test, cost sensitivity, and
-buy-and-hold comparison before drawing conclusions. A return increase after
-2022 is not considered validated merely because it reproduces; inspect its
-period concentration, turnover, symbols, and cost sensitivity. Point-in-time
-constituent membership and a licensed survivorship-bias-controlled data source
-are required for production-quality research.
+Historical return tables from earlier revisions are intentionally removed:
+they used different execution accounting and universes and should not be
+quoted as current results. Use segmented/regime results, look-ahead mutation
+checks, cost sensitivity, and buy-and-hold comparisons. A return increase in
+one period is not validated by reproduction alone; inspect concentration,
+turnover, selected symbols, and untouched out-of-sample periods. See
+[RESEARCH_MATHEMATICS.md](./RESEARCH_MATHEMATICS.md) for assumptions and
+[AUDIT_FINDINGS.md](./AUDIT_FINDINGS.md) for remaining data/accounting limits.
 
 ## Troubleshooting
 

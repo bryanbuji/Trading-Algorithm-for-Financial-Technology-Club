@@ -22,6 +22,15 @@ from trading.strategy import weekly_momentum_weights
 
 config = load_config(root / "config.yaml")
 prices = load_prices(root / "data" / "processed" / "prices.parquet")
+trade_asset_classes = set(
+    config.values.get("trade_asset_classes", config.values.get("asset_classes", {}))
+)
+excluded_symbols = [
+    symbol
+    for asset_class, symbols in config.values.get("asset_classes", {}).items()
+    if asset_class not in trade_asset_classes
+    for symbol in symbols
+]
 
 builder = lambda frame, benchmark: weekly_momentum_weights(
     frame,
@@ -37,6 +46,8 @@ builder = lambda frame, benchmark: weekly_momentum_weights(
     config["drawdown_start"],
     config["drawdown_full_defense"],
     volatility_target=config["volatility_target"],
+    excluded_symbols=excluded_symbols,
+    benchmark_fallback=config.values.get("benchmark_fallback", False),
     rebalance_frequency=config["frequency"],
 )
 
@@ -104,4 +115,12 @@ scenarios = [
     },
 ]
 print("\nCOST SENSITIVITY")
-print(test_cost_sensitivity(prices, weights, config["initial_capital"], scenarios).round(4).to_string())
+print(
+    test_cost_sensitivity(
+        prices,
+        weights,
+        config["initial_capital"],
+        scenarios,
+        execution_lag_days=config["signal_execution_lag_days"],
+    ).round(4).to_string()
+)

@@ -105,9 +105,13 @@ def weekly_momentum_weights(
             weights.loc[date] *= max_equity_exposure / total
         if volatility_target is not None and total > 0:
             selected_returns = daily_returns[weights.columns[weights.loc[date] > 0]]
-            portfolio_volatility = selected_returns.mul(weights.loc[date], axis=1).sum(axis=1).rolling(
-                volatility_days
-            ).std().iloc[-1] * np.sqrt(252)
+            portfolio_returns = selected_returns.mul(
+                weights.loc[date], axis=1
+            ).sum(axis=1).loc[:date]
+            portfolio_volatility = (
+                portfolio_returns.rolling(volatility_days).std().iloc[-1]
+                * np.sqrt(252)
+            )
             if pd.notna(portfolio_volatility) and portfolio_volatility > volatility_target:
                 weights.loc[date] *= volatility_target / portfolio_volatility
     return weights

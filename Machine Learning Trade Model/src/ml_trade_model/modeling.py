@@ -9,9 +9,20 @@ def build_feature_panel(
     prices: pd.DataFrame,
     benchmark: str,
     frequency: str = "W-FRI",
+    horizon_periods: int = 21,
 ) -> Tuple[pd.DataFrame, pd.Series]:
-    prices = prices.resample(frequency).last().replace([np.inf, -np.inf], np.nan)
-    prices = prices.where(prices > 0).ffill()
+    if horizon_periods < 1:
+        raise ValueError("horizon_periods must be at least 1")
+    # Price rows are already trading sessions. Calendar-day resampling would
+    # insert weekends and turn a 21-bar daily target into a 21-calendar-day one.
+    if frequency == "D":
+        prices = prices.copy()
+    else:
+        prices = prices.resample(frequency).last()
+    prices = prices.replace([np.inf, -np.inf], np.nan)
+    # Bridge at most one missing bar; do not extend a delisted symbol's last
+    # value indefinitely and create artificial zero-return training labels.
+    prices = prices.where(prices > 0).ffill(limit=1)
     returns = prices.pct_change(fill_method=None)
     benchmark_return = returns[benchmark]
     frames = []
@@ -34,7 +45,9 @@ def build_feature_panel(
         )
         features["symbol"] = symbol
         frames.append(features)
-        targets.append(series.shift(-21).div(series).sub(1).rename("target"))
+        targets.append(
+            series.shift(-horizon_periods).div(series).sub(1).rename("target")
+        )
     panel = pd.concat(frames).reset_index().rename(columns={"Date": "date", "index": "date"})
     target = pd.concat(targets).reset_index(drop=True)
     panel["target"] = target
@@ -53,8 +66,11 @@ def walk_forward_predictions(
     min_train_days: int = 260,
     retrain_days: int = 13,
     frequency: str = "W-FRI",
+    horizon_periods: int = 21,
 ) -> Tuple[pd.DataFrame, Dict[str, float]]:
-    panel, target = build_feature_panel(prices, benchmark, frequency)
+    panel, target = build_feature_panel(
+        prices, benchmark, frequency, horizon_periods=horizon_periods
+    )
     feature_names = list(panel.columns)
     dates = sorted(panel.index.get_level_values("date").unique())
     predictions = []
@@ -62,7 +78,9 @@ def walk_forward_predictions(
     for index, date in enumerate(dates):
         if index < min_train_days or index % retrain_days != 0:
             continue
-        train_dates = dates[:index]
+        # Purge labels whose forward-return windows reach the prediction date.
+        # The target for date t uses prices through t + horizon_periods.
+        train_dates = dates[: max(0, index - horizon_periods)]
         train_mask = panel.index.get_level_values("date").isin(train_dates)
         test_mask = panel.index.get_level_values("date") == date
         if not test_mask.any():

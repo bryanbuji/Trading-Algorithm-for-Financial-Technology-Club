@@ -1,6 +1,7 @@
 
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 TRADE_COLUMNS = [
@@ -36,9 +37,35 @@ def run_backtest(
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if execution_lag_days < 0:
         raise ValueError("execution_lag_days must be non-negative")
+    if trailing_missing_days < 1:
+        raise ValueError("trailing_missing_days must be at least 1")
+    if not np.isfinite(initial_capital) or initial_capital <= 0:
+        raise ValueError("initial_capital must be a finite positive value")
+    cost_inputs = (commission_bps, half_spread_bps, slippage_bps, market_impact_bps)
+    if any(not np.isfinite(value) or value < 0 for value in cost_inputs):
+        raise ValueError("transaction costs must be finite non-negative basis points")
+    if prices.index.has_duplicates or not prices.index.is_monotonic_increasing:
+        raise ValueError("prices must have a unique, increasing date index")
+    if target_weights.index.has_duplicates or not target_weights.index.is_monotonic_increasing:
+        raise ValueError("target weights must have a unique, increasing date index")
     returns = prices.ffill().pct_change(fill_method=None).fillna(0)
-    weights = target_weights.reindex(prices.index).ffill().fillna(0)
+    # Keep off-calendar signal labels (for example, Friday when the exchange
+    # closed) so the signal carries to the next actual price date.
+    signal_calendar = prices.index.union(target_weights.index).sort_values()
+    weights = (
+        target_weights.reindex(signal_calendar)
+        .ffill()
+        .reindex(prices.index)
+        .fillna(0)
+    )
     weights = weights.reindex(columns=prices.columns, fill_value=0)
+    if not np.isfinite(weights.to_numpy()).all():
+        raise ValueError("target weights must be finite")
+    if (weights < -1e-12).any().any():
+        raise ValueError("long-only target weights cannot be negative")
+    if (weights.sum(axis=1) > 1.0 + 1e-9).any():
+        raise ValueError("long-only target weights cannot exceed 100% exposure")
+    liquidation_dates = {}
     if liquidate_trailing_missing:
         for symbol in prices.columns:
             valid_dates = prices[symbol].dropna().index
@@ -48,17 +75,29 @@ def run_backtest(
             last_valid = valid_dates[-1]
             trailing = prices.index > last_valid
             if trailing.sum() >= trailing_missing_days:
-                first_missing = prices.index[trailing][0]
-                returns.loc[first_missing, symbol] = -1.0
-                weights.loc[trailing, symbol] = 0.0
-    turnover = weights.diff().abs().sum(axis=1).fillna(weights.abs().sum(axis=1))
+                # Decide only after the missing run reaches its threshold; do
+                # not use later missing dates to backdate a delisting exit.
+                liquidation_date = prices.index[trailing][trailing_missing_days - 1]
+                returns.loc[liquidation_date, symbol] = -1.0
+                weights.loc[weights.index >= liquidation_date, symbol] = 0.0
+                liquidation_dates[symbol] = liquidation_date
+    # Signals are filled at the configured next-session close. A close-to-close
+    # return is earned only after that fill, and transaction costs are charged
+    # on the fill date rather than the earlier signal date.
+    holdings = weights.shift(execution_lag_days).fillna(0)
+    for symbol, liquidation_date in liquidation_dates.items():
+        holdings.loc[holdings.index >= liquidation_date, symbol] = 0.0
+    turnover = holdings.diff().abs().sum(axis=1).fillna(holdings.abs().sum(axis=1))
     cost_rate = (commission_bps + half_spread_bps + slippage_bps + market_impact_bps) / 10000
-    gross_returns = (weights.shift(execution_lag_days).fillna(0) * returns).sum(axis=1)
-    net_returns = gross_returns - turnover * cost_rate
+    gross_returns = (holdings.shift(1).fillna(0) * returns).sum(axis=1)
+    # A fully invested long-only account may lose all its capital, but cannot
+    # owe more than its account value. This also covers a -100% delisting loss
+    # plus execution costs on the forced liquidation.
+    net_returns = (gross_returns - turnover * cost_rate).clip(lower=-1.0)
     equity = initial_capital * (1 + net_returns).cumprod()
     ledger = pd.DataFrame({"returns": net_returns, "turnover": turnover, "equity": equity})
-    trades = build_trade_ledger(prices, weights, equity, cost_rate)
-    return ledger, weights, trades
+    trades = build_trade_ledger(prices, holdings, equity, cost_rate, initial_capital)
+    return ledger, holdings, trades
 
 
 def buy_and_hold_backtest(
@@ -98,6 +137,7 @@ def build_trade_ledger(
     weights: pd.DataFrame,
     equity: pd.Series,
     cost_rate: float,
+    initial_capital: float,
 ) -> pd.DataFrame:
     changes = weights.diff().fillna(weights)
     records = []
@@ -108,7 +148,9 @@ def build_trade_ledger(
     for date, row in changes.iterrows():
         for symbol, weight_change in row[row.abs() > 1e-12].items():
             weight_after = float(weights.loc[date, symbol])
-            portfolio_value = float(equity.shift(1).reindex([date]).fillna(equity.iloc[0]).iloc[0])
+            portfolio_value = float(
+                equity.shift(1).reindex([date]).fillna(initial_capital).iloc[0]
+            )
             notional = abs(float(weight_change)) * portfolio_value
             raw_price = prices.loc[date, symbol]
             execution_price = float(raw_price) if pd.notna(raw_price) else 0.0

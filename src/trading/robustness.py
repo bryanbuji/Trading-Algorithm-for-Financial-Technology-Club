@@ -92,6 +92,7 @@ def test_cost_sensitivity(
     weights: pd.DataFrame,
     initial_capital: float,
     cost_scenarios: Iterable[Mapping[str, float]],
+    execution_lag_days: int = 1,
 ) -> pd.DataFrame:
     """Run the same signals under multiple explicit execution-cost assumptions."""
     from trading.backtest import run_backtest
@@ -106,6 +107,7 @@ def test_cost_sensitivity(
             scenario["half_spread_bps"],
             scenario["slippage_bps"],
             scenario["market_impact_bps"],
+            execution_lag_days=execution_lag_days,
         )
         metrics = performance_metrics(ledger)
         records.append(

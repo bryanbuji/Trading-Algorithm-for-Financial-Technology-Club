@@ -55,4 +55,7 @@ daily_rebalance_dates = prices.index.intersection(rebalance_dates)
 print("\nSIGNAL TIMING")
 print(f"Configured signal dates: {len(rebalance_dates):,}")
 print(f"Signals coinciding with daily observations: {len(daily_rebalance_dates):,}")
-print("The pandas engine applies each signal's weights to the next available daily return.")
+print(
+    "The pandas engine fills after the configured row lag and earns close-to-close "
+    "returns only after the fill date."
+)

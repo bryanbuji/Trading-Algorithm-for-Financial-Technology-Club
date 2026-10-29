@@ -24,40 +24,14 @@ stop_loss_pct: 0.15
 drawdown_start: 0.10
 drawdown_full_defense: 0.25
 defensive_exposure: 0.25
-universe: "multi_asset_research"
-include_current_sp500: true
+benchmark_fallback: true
+universe: "multi_asset_etfs"
+# Use the configured ETF panel instead of projecting today's S&P 500 members
+# backward through history. ETF survivorship and membership bias still remain.
+include_current_sp500: false
 symbols:
-  - AAPL
-  - MSFT
-  - NVDA
-  - AMZN
-  - META
-  - GOOGL
-  - AVGO
-  - JPM
-  - XOM
-  - UNH
-  - COST
-  - WMT
-  - JNJ
-  - PG
-  - HD
-  - CAT
-  - AMD
-  - NFLX
   - SPY
   - QQQ
-  - XLB
-  - XLC
-  - XLE
-  - XLF
-  - XLI
-  - XLK
-  - XLP
-  - XLRE
-  - XLU
-  - XLV
-  - XLY
 historical_symbols:
   # Post-2012 failures/delistings. Provider coverage must be verified before
   # inclusion; pre-2012 collapses are outside this backtest's sample.
@@ -128,12 +102,6 @@ asset_classes:
     - UNG
     - DBA
     - DBC
-    - GC=F
-    - CL=F
-    - SI=F
-    - HG=F
-    - ZC=F
-    - ZS=F
 risk_profiles:
   conservative:
     top_n: 8
