@@ -1,12 +1,15 @@
 # Trading Algorithm for Financial Technology Club
 
-This project is a weekly, long-only multi-asset research system. It combines
+This project is a weekly, long-only multi-asset research system. Its Yahoo
+Finance universe includes today's S&P 500 constituents and the configured ETF
+lists, giving the ranker hundreds of stock candidates. It combines
 cross-sectional momentum, volatility-adjusted position sizing, a broad-market
 trend regime, trailing stop-loss filtering, transaction costs, and drawdown
 exposure controls. It now reports mathematically defined expected-return
 proxies, volatility, downside volatility, beta, correlation, reward/risk,
-portfolio Sharpe, and concentration. An optional ML workflow is provided
-separately. It is
+portfolio Sharpe, and concentration. See [STRATEGY.md](STRATEGY.md) for the
+signals, ranking, sizing, and risk controls. An optional ML workflow is
+provided separately. It is
 designed for teaching and reproducible research; it does not place live
 brokerage orders.
 
@@ -66,8 +69,12 @@ JupyterLab opens in a browser at a localhost URL. In JupyterLab:
    want a focused chart.
 
 The first notebook downloads adjusted daily prices for the configured
-equities, forex, bonds, commodities, and explicit historical-symbol lists and
-saves them to `data/processed/prices.parquet`. The second notebook uses that
+equities, forex, bonds, commodities, historical S&P 500 constituents, current
+S&P 500 members, and explicit failed-symbol lists, then saves them to
+`data/processed/prices.parquet`. It also saves dated membership masks to
+`data/processed/universe_membership.parquet`; the strategy uses these to admit
+S&P 500 stocks only while the public history says they were members. The
+second notebook uses that
 cache, prints the rules-based report, plots portfolio value and drawdown,
 marks buy/sell activity, and shows a formatted 100-row trade preview with
 execution date, symbol, side, weights, execution price, notional value,
@@ -97,10 +104,11 @@ cd Trading-Algorithm-for-Financial-Technology-Club
 # Download the configured Yahoo Finance universe.
 PYTHONPATH=src .venv/bin/python - <<'PY'
 from trading.config import load_config
-from trading.data import configured_symbols, download_prices
+from pathlib import Path
+from trading.data import load_configured_market_data
 
 config = load_config()
-download_prices(configured_symbols(config), config["start_date"])
+load_configured_market_data(config, Path.cwd(), refresh_yahoo=True)
 PY
 
 # Verify the project.
@@ -139,11 +147,10 @@ values; changing only the top-level copy will not override a profile value.
 The profile changes exposure, position caps, volatility targeting, and
 stop-loss tolerance; it does not change the signal universe.
 
-The allocator redistributes weight after applying position caps. The default
-universe uses ETFs and omits current S&P 500 constituents projected backward.
-Futures are omitted because front-month contract prices and rolls cannot be
-modeled as ordinary adjusted ETF prices. This reduces, but does not remove,
-survivorship and instrument-history bias.
+The balanced profile ranks up to 20 positions and caps each at 5%. The
+allocator redistributes weight after applying position caps. Futures are
+omitted because front-month contract prices and rolls cannot be modeled as
+ordinary adjusted ETF prices.
 
 ## Run without JupyterLab
 
@@ -164,28 +171,31 @@ drawdown_start: 0.05
 ```
 
 After changing `symbols` or the asset-class lists, rerun `01_data_download.ipynb`
-before running the backtest. The configured universe is a selected set of
-currently available ETFs plus a short list of failed equities. It remains
-survivor-selected: failed ETFs and securities, historical membership, ticker
-changes, and actual delisting returns are incomplete. Five trailing missing
-observations are treated as a total-loss liquidation, a conservative
+before running the backtest. Historical S&P 500 membership is filtered using
+dated public snapshots, but Yahoo may not return all past securities, failed
+ETFs/equities, ticker changes, or observed delisting returns. Five trailing
+missing observations are treated as a total-loss liquidation, a conservative
 placeholder rather than an observed delisting return. Interior gaps are
 forward-filled and can hide stale pricing.
 
 ## Data sources and survivorship controls
 
-There is no complete, point-in-time, survivorship-bias-free US equity database
-with adjusted prices that is both freely redistributable and available through
-a simple public API. The project therefore does not claim that its Yahoo
-Finance cache is delisted-security data.
+The project uses free Yahoo Finance history through `yfinance`; it does not
+use a paid market-data database. The interface is unofficial, may throttle
+large requests, and does not guarantee delisted-security coverage or stable
+adjusted history.
 
-No free Yahoo/Alpha Vantage add-on supplies the complete point-in-time
-membership, identity, corporate-action, and delisting-return history needed
-for a survivorship-controlled stock backtest. For that study, use licensed
-data such as [CRSP US Stock](https://www.crsp.org/research/crsp-us-stock-databases-2025-layout/)
-or [Norgate historical constituent and delisted-security data](https://norgatedata.com/data-content-tables/).
-Verify exchange coverage, effective dates, delisting returns, symbol identity,
-adjustments, and usage rights before integrating either source.
+The current S&P 500 list is fetched from Wikipedia during a Yahoo refresh. The
+strategy also downloads public historical snapshots from
+[thuningxu/sp500nq100](https://github.com/thuningxu/sp500nq100), which currently
+cover January 1996 through June 2, 2026. It carries the latest historical
+state forward. The current roster is applied only on the current date when a
+Yahoo price bar exists for that date; membership changes in the gap are not
+reconstructed exactly. This keeps today's names out of earlier ranking
+dates for the covered history. The community data has stated reconstruction
+gaps, and Yahoo still omits some dead securities, delisting returns, ticker
+identity changes, and complete corporate actions. This is a free research
+approximation, not a complete survivorship-controlled database.
 
 Other sources have narrower purposes:
 
@@ -206,14 +216,82 @@ limitation rather than silently treating it as a complete delisted universe.
 Before using any free source, record its license, symbol membership dates,
 price adjustment method, listing date, delisting date, and missing-data policy.
 
-The optional adapters are in
-[src/trading/open_data.py](./src/trading/open_data.py). Download selected
-research data with:
+The Alpha Vantage downloader uses the free API key only in an environment
+variable. Get a key from [Alpha Vantage](https://www.alphavantage.co/support/#api-key),
+then set it for the current terminal session.
 
 ```sh
-# Optional only: add Alpha Vantage adjusted prices to the existing Yahoo cache.
-# The normal download, notebooks, tests, and backtest work without this.
-export ALPHAVANTAGE_API_KEY="your-key"
+# macOS / Linux (zsh or bash)
+export ALPHAVANTAGE_API_KEY="paste-your-key-here"
+
+# Windows PowerShell
+$env:ALPHAVANTAGE_API_KEY = "paste-your-key-here"
+```
+
+Do not put the key in Python code, a notebook, the ticker CSV, or a command-line
+argument. To fetch a regular ticker, make a text file with one symbol per line:
+
+```text
+AAPL
+MSFT
+SPY
+```
+
+Then run:
+
+```sh
+PYTHONPATH=src .venv/bin/python scripts/download_alpha_vantage_history.py \
+  --tickers-file data/alpha_tickers.txt
+```
+
+On Windows, run the same script with the project environment path:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\download_alpha_vantage_history.py `
+  --tickers-file data\alpha_tickers.txt
+```
+
+For aliases or known delisted symbols, use a CSV. `api_symbol` is the symbol
+sent to Alpha Vantage; `symbol` is preserved as the local identity. Check
+aliases carefully so a recycled ticker is not assigned to the wrong company.
+
+```csv
+symbol,api_symbol,status
+AAPL,AAPL,active
+SIVB,SIVB,delisted
+OLD,NEW,delisted
+```
+
+The downloader stores one CSV per ticker immediately, a combined
+`alpha_vantage_adjusted_history.csv`, request timestamps, and
+`error_log.txt` under `data/alpha_vantage/`. A rerun validates and skips cached
+tickers, then continues with missing or failed ones. It enforces at most five
+requests in any rolling minute and a conservative 25 requests per rolling day;
+the request ledger persists this limit between runs. Rate-limit messages get
+exponential backoff. When the daily allowance is exhausted, remaining symbols
+are deferred for a later run. Alpha Vantage currently documents a 25-request
+free daily allowance and identifies `TIME_SERIES_DAILY_ADJUSTED` as a premium
+endpoint, so a free key may be refused access to adjusted daily prices. The
+[official quota page](https://www.alphavantage.co/support/) and
+[API documentation](https://www.alphavantage.co/documentation/) describe these
+limits and endpoint access. The script logs an access error rather than
+repeatedly retrying every symbol.
+
+Alpha Vantage uses `TIME_SERIES_DAILY_ADJUSTED&symbol=...` for price history.
+Its separate `LISTING_STATUS` endpoint accepts `state=delisted` and an optional
+`date`; for CSV rows marked `delisted`, the downloader queries and caches that
+status list before fetching prices. The price endpoint itself has no
+`state=delisted` parameter. It still attempts the supplied `api_symbol` and
+logs empty or unsupported histories. The listing-status list is a roster
+snapshot, not historical prices or complete company-identity history. See the
+[official API documentation](https://www.alphavantage.co/documentation/#listing-status).
+
+The optional FRED and SEC adapters are in
+[src/trading/open_data.py](./src/trading/open_data.py). For Alpha Vantage, you
+can also merge selected cached histories into the Yahoo panel with:
+
+```sh
+# Optional: merge selected Alpha Vantage histories into the Yahoo cache.
 PYTHONPATH=src python3.15 scripts/download_open_data.py \
   --merge-alpha-symbol SIVB \
   --merge-alpha-symbol FRC
@@ -254,7 +332,7 @@ repository [LEAN based trading algorithm FINTECH](</Users/buji/Projects/LEAN%20b
 It reproduces the weekly signal cadence, next-session execution, top-five
 momentum selection, inverse-volatility sizing, position caps, and SPY fallback.
 It requires the LEAN CLI (installed with `pipx`), Docker, and LEAN-compatible
-licensed data; this project's Yahoo Finance Parquet files are not automatically
+price files; this project's Yahoo Finance Parquet files are not automatically
 valid LEAN data.
 
 Run the pandas provenance audit before comparing engines:
@@ -270,9 +348,9 @@ them. Treat all risk profiles as exploratory choices, not an out-of-sample
 ranking; select parameters on training data and report untouched test-period
 performance.
 
-For a serious survivorship-bias study, load point-in-time memberships and
-delisting returns from a suitable provider; adding tickers to
-`historical_symbols` alone cannot correct the universe.
+The public membership mask improves point-in-time eligibility, but Yahoo still
+lacks stable security identifiers and complete delisting returns. Adding names
+to `historical_symbols` alone cannot correct those remaining gaps.
 
 ## Project defaults
 

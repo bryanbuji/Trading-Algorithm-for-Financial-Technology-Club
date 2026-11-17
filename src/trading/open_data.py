@@ -5,6 +5,7 @@ import json
 import os
 import warnings
 from datetime import date
+from pathlib import Path
 from typing import Any, Optional, Union
 from urllib.error import HTTPError
 from urllib.parse import urlencode
@@ -72,15 +73,43 @@ def merge_alpha_vantage_prices(
     yahoo_prices: pd.DataFrame,
     symbols: list[str],
     api_key: Optional[str] = None,
+    cache_dir: Union[str, Path] = "data/alpha_vantage",
 ) -> pd.DataFrame:
-    """Add Alpha Vantage histories to the Yahoo cache without replacing Yahoo data."""
+    """Fetch/cache Alpha Vantage histories and merge them without replacing Yahoo data."""
+    from trading.alpha_vantage_history import AlphaVantageHistoryDownloader, _safe_filename
+
     result = yahoo_prices.copy()
-    for symbol in dict.fromkeys(symbols):
+    requested = list(dict.fromkeys(symbols))
+    cache_dir = Path(cache_dir)
+    downloader = AlphaVantageHistoryDownloader(
+        api_key or os.getenv("ALPHAVANTAGE_API_KEY", ""), cache_dir
+    )
+    downloader.download(
+        {"symbol": symbol, "api_symbol": symbol, "status": "active"}
+        for symbol in requested
+    )
+    for symbol in requested:
+        cache_path = cache_dir / f"{_safe_filename(symbol)}.csv"
         try:
-            alpha_prices = alpha_vantage_daily_adjusted(symbol, api_key=api_key)
-        except RuntimeError as error:
+            cached = pd.read_csv(cache_path)
+            if not {"date", "symbol", "api_symbol", "adjusted_close"}.issubset(cached.columns):
+                raise ValueError("cached adjusted-price CSV has an invalid schema")
+            cached = cached.loc[
+                cached["symbol"].eq(symbol) & cached["api_symbol"].eq(symbol)
+            ]
+            if cached.empty:
+                raise ValueError("no valid cached rows for requested symbol")
+            alpha_prices = pd.Series(
+                pd.to_numeric(cached["adjusted_close"], errors="coerce").to_numpy(),
+                index=pd.to_datetime(cached["date"], errors="coerce"),
+                name=symbol,
+            ).dropna()
+            alpha_prices = alpha_prices.loc[~alpha_prices.index.isna()].sort_index()
+            if alpha_prices.empty:
+                raise ValueError("cached adjusted-price CSV has no numeric prices")
+        except (OSError, pd.errors.ParserError, ValueError) as error:
             warnings.warn(
-                f"Skipping Alpha Vantage symbol {symbol}: {error}",
+                f"Skipping Alpha Vantage symbol {symbol}: {error}; see {downloader.error_log}",
                 RuntimeWarning,
                 stacklevel=2,
             )

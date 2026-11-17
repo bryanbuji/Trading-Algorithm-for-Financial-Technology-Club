@@ -10,7 +10,7 @@ sys.path.insert(0, str(root / "src"))
 
 from trading.backtest import buy_and_hold_backtest, performance_metrics, run_backtest
 from trading.config import load_config
-from trading.data import load_prices
+from trading.data import load_configured_market_data
 from trading.robustness import (
     DEFAULT_REGIMES,
     assert_no_lookahead,
@@ -21,7 +21,7 @@ from trading.robustness import (
 from trading.strategy import weekly_momentum_weights
 
 config = load_config(root / "config.yaml")
-prices = load_prices(root / "data" / "processed" / "prices.parquet")
+prices, universe_membership = load_configured_market_data(config, root)
 trade_asset_classes = set(
     config.values.get("trade_asset_classes", config.values.get("asset_classes", {}))
 )
@@ -49,6 +49,7 @@ builder = lambda frame, benchmark: weekly_momentum_weights(
     excluded_symbols=excluded_symbols,
     benchmark_fallback=config.values.get("benchmark_fallback", False),
     rebalance_frequency=config["frequency"],
+    universe_membership=universe_membership,
 )
 
 weights = builder(prices, config["benchmark"])

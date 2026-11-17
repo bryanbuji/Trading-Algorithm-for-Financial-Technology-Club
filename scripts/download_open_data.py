@@ -30,6 +30,11 @@ parser.add_argument(
     type=Path,
     default=root / "data" / "processed" / "prices.parquet",
 )
+parser.add_argument(
+    "--alpha-data-dir",
+    type=Path,
+    default=root / "data" / "alpha_vantage",
+)
 parser.add_argument("--fred-series", action="append", default=[])
 parser.add_argument("--sec-cik", action="append", default=[])
 args = parser.parse_args()
@@ -41,7 +46,11 @@ if args.merge_alpha_symbol:
     if not args.prices_cache.exists():
         raise SystemExit(f"Yahoo prices cache does not exist: {args.prices_cache}")
     yahoo_prices = pd.read_parquet(args.prices_cache)
-    merged = merge_alpha_vantage_prices(yahoo_prices, args.merge_alpha_symbol)
+    merged = merge_alpha_vantage_prices(
+        yahoo_prices,
+        args.merge_alpha_symbol,
+        cache_dir=args.alpha_data_dir,
+    )
     args.prices_cache.parent.mkdir(parents=True, exist_ok=True)
     merged.to_parquet(args.prices_cache)
     print(

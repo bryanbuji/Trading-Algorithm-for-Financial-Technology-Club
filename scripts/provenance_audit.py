@@ -9,11 +9,11 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / "src"))
 
 from trading.config import load_config
-from trading.data import coverage_report, load_prices
+from trading.data import coverage_report, load_configured_market_data
 from trading.strategy import weekly_momentum_weights
 
 config = load_config(root / "config.yaml")
-prices = load_prices(root / "data" / "processed" / "prices.parquet")
+prices, universe_membership = load_configured_market_data(config, root)
 coverage = coverage_report(prices)
 
 print("DATA PROVENANCE")
@@ -49,6 +49,7 @@ weights = weekly_momentum_weights(
     config["drawdown_full_defense"],
     volatility_target=config["volatility_target"],
     rebalance_frequency=config["frequency"],
+    universe_membership=universe_membership,
 )
 rebalance_dates = weights.index[weights.diff().abs().sum(axis=1) > 0]
 daily_rebalance_dates = prices.index.intersection(rebalance_dates)

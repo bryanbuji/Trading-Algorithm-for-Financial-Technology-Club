@@ -45,6 +45,7 @@ def weekly_momentum_weights(
     include_benchmark: bool = False,
     benchmark_fallback: bool = False,
     rebalance_frequency: str = "W-FRI",
+    universe_membership: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     if benchmark not in prices:
         raise KeyError(f"Benchmark {benchmark!r} is missing from prices")
@@ -71,6 +72,16 @@ def weekly_momentum_weights(
     )
     exposure = exposure.clip(lower=defensive_exposure, upper=1.0)
     weights = pd.DataFrame(0.0, index=weekly.index, columns=prices.columns)
+    membership = None
+    if universe_membership is not None:
+        if universe_membership.index.has_duplicates or not universe_membership.index.is_monotonic_increasing:
+            raise ValueError("universe membership must have a unique, increasing date index")
+        membership = (
+            universe_membership.reindex(columns=prices.columns)
+            .reindex(weekly.index, method="ffill")
+            .fillna(False)
+            .astype(bool)
+        )
     excluded = set(excluded_symbols or [])
     candidates = [
         symbol
@@ -85,10 +96,15 @@ def weekly_momentum_weights(
             if expected_returns is not None
             else momentum.loc[date, candidates].dropna()
         )
+        if membership is not None:
+            eligible = membership.loc[date].reindex(scores.index).fillna(False)
+            scores = scores[eligible]
         scores = scores[~stop_triggered.loc[date, scores.index]]
         vol = volatility.loc[date, candidates].reindex(scores.index)
         scores = scores[vol.notna() & (vol > 0)].nlargest(top_n)
         if scores.empty:
+            if benchmark_fallback:
+                weights.loc[date, benchmark] = min(max_equity_exposure, exposure.loc[date])
             continue
         target_exposure = min(max_equity_exposure, exposure.loc[date])
         raw = _allocate_capped_inverse_volatility(

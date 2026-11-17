@@ -18,13 +18,13 @@ sys.path.insert(0, str(root / "Machine Learning Trade Model" / "src"))
 from ml_trade_model.modeling import walk_forward_predictions
 from trading.backtest import format_performance_report, run_backtest
 from trading.config import load_config
-from trading.data import load_prices
+from trading.data import load_configured_market_data
 from trading.risk import portfolio_risk_diagnostics
 from trading.strategy import weekly_momentum_weights
 
 
 config = load_config(root / "config.yaml")
-prices = load_prices(root / "data" / "processed" / "prices.parquet")
+prices, universe_membership = load_configured_market_data(config, root)
 predictions, quality = walk_forward_predictions(
     prices, config["benchmark"], frequency=config["frequency"]
 )
@@ -55,6 +55,7 @@ weights = weekly_momentum_weights(
     excluded_symbols=excluded_symbols,
     benchmark_fallback=config.values.get("benchmark_fallback", False),
     rebalance_frequency=config["frequency"],
+    universe_membership=universe_membership,
 )
 ledger, holdings, trades = run_backtest(
     prices,

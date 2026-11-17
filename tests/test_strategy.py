@@ -53,6 +53,56 @@ def test_excluded_symbols_are_not_selected() -> None:
     assert (weights["BOND"] == 0).all()
 
 
+def test_point_in_time_membership_filters_nonmembers() -> None:
+    index = pd.date_range("2012-01-01", periods=120, freq="B")
+    prices = pd.DataFrame(
+        {
+            "SPY": 100 * (1.001 ** pd.Series(range(len(index)), index=index)),
+            "AAA": 50 * (1.002 ** pd.Series(range(len(index)), index=index)),
+            "BBB": 80 * (1.003 ** pd.Series(range(len(index)), index=index)),
+        },
+        index=index,
+    )
+    membership = pd.DataFrame(True, index=index, columns=prices.columns)
+    membership["BBB"] = False
+
+    weights = weekly_momentum_weights(
+        prices,
+        "SPY",
+        top_n=2,
+        lookback_days=20,
+        skip_days=5,
+        volatility_days=10,
+        max_position_weight=0.5,
+        universe_membership=membership,
+    )
+
+    assert (weights["BBB"] == 0).all()
+
+
+def test_benchmark_fallback_is_used_when_no_equity_candidate_qualifies() -> None:
+    index = pd.date_range("2012-01-01", periods=120, freq="B")
+    prices = pd.DataFrame(
+        {
+            "SPY": 100 * (1.001 ** pd.Series(range(len(index)), index=index)),
+            "AAA": 50 * (1.002 ** pd.Series(range(len(index)), index=index)),
+        },
+        index=index,
+    )
+
+    weights = weekly_momentum_weights(
+        prices,
+        "SPY",
+        lookback_days=20,
+        skip_days=5,
+        volatility_days=10,
+        excluded_symbols=["AAA"],
+        benchmark_fallback=True,
+    )
+
+    assert (weights["SPY"] > 0).any()
+
+
 def test_recent_missing_observation_does_not_zero_all_signals() -> None:
     index = pd.date_range("2012-01-01", periods=500, freq="B")
     prices = pd.DataFrame(

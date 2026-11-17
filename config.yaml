@@ -1,5 +1,6 @@
 start_date: "2012-01-01"
 end_date: null
+data_provider: "yahoo"
 initial_capital: 100000
 # Use "D" for daily rebalancing, or "W-FRI" for weekly Friday rebalancing.
 frequency: "W-FRI"
@@ -7,13 +8,13 @@ signal_execution_lag_days: 1
 direction: "long_only"
 benchmark: "SPY"
 nasdaq_benchmark: "QQQ"
-top_n: 10
+top_n: 20
 lookback_days: 126
 skip_days: 21
 volatility_days: 63
 forecast_horizon_days: 21
 volatility_target: 0.20
-max_position_weight: 0.10
+max_position_weight: 0.05
 max_equity_exposure: 1.0
 min_cash_weight: 0.0
 commission_bps: 1.0
@@ -26,9 +27,10 @@ drawdown_full_defense: 0.25
 defensive_exposure: 0.25
 benchmark_fallback: true
 universe: "multi_asset_etfs"
-# Use the configured ETF panel instead of projecting today's S&P 500 members
-# backward through history. ETF survivorship and membership bias still remain.
-include_current_sp500: false
+# Include today's S&P 500 members in Yahoo requests. This broadens the
+# cross-section but creates survivorship bias in historical results.
+include_current_sp500: true
+include_historical_sp500: true
 symbols:
   - SPY
   - QQQ
@@ -110,9 +112,9 @@ risk_profiles:
     volatility_target: 0.12
     stop_loss_pct: 0.10
   balanced:
-    top_n: 10
+    top_n: 20
     max_equity_exposure: 1.00
-    max_position_weight: 0.10
+    max_position_weight: 0.05
     volatility_target: 0.20
     stop_loss_pct: 0.15
   aggressive:
